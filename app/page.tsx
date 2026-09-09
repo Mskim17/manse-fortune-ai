@@ -11,6 +11,8 @@ interface BirthInfo {
   name: string;
   unknownHour: boolean;
   isLunar: boolean;
+  // 음력 생일이 윤달인지 여부. 평달과 윤달은 양력 날짜가 완전히 달라진다.
+  isLeapMonth?: boolean;
 }
 
 interface FortuneResult {
@@ -74,8 +76,9 @@ interface FortuneResult {
     finalYongsin: {
       finalYongsinEl: string;
       finalYongsin: string;
-      confidence: "확실" | "보통" | "참고";
+      confidence: "유력" | "경합" | "불확실";
       reason: string;
+      candidates: { el: string; name: string; votes: string[]; rootPct: number; rootless: boolean }[];
     };
   };
 }
@@ -89,6 +92,7 @@ interface PartnerInfo {
   hour: number | "";
   unknownHour: boolean;
   isLunar: boolean;
+  isLeapMonth?: boolean;
 }
 
 // ── 오행 매핑 ──
@@ -164,21 +168,6 @@ const helpContents: Record<string, { title: string; content: string }> = {
 각 기둥은 천간(위)과 지지(아래)로 이루어져 있어요.
 일간(일주의 천간)이 사주 분석의 기준점이에요.`,
   },
-  오행점수: {
-    title: "오행 점수 란?",
-    content: `사주 원국과 오늘 일진의 오행(목·화·토·금·수) 분포를 점수로 나타낸 거예요.
-
-- 월지(月支)에 해당하는 오행은 3배 가중치
-- 나머지 천간·지지는 기본 점수
-
-오행이 한쪽으로 치우치면 그 오행이 과다해져 부작용이 생길 수 있어요.
-
-- 용신 💎: 나에게 가장 필요한 오행
-- 희신 ✨: 용신을 도와주는 오행
-- 기신 ⚠️: 나에게 해로운 오행
-- 구신 🔻: 기신을 도와주는 오행
-- 한신 ➖: 중립 오행`,
-  },
   신강신약: {
     title: "신강·신약 (身强·身弱) 이란?",
     content: `일간(나 자신)의 기운이 강한지 약한지를 나타내요.
@@ -195,57 +184,6 @@ const helpContents: Record<string, { title: string; content: string }> = {
   → 가장 이상적인 상태예요
 
 점수 50% 기준으로 60% 이상이면 신강, 40% 이하면 신약이에요.`,
-  },
-  조후: {
-    title: "조후 (調候) 란?",
-    content: `계절의 온도·습도 균형을 맞추는 개념이에요.
-
-사주가 아무리 좋아도 계절 기운이 극단적이면 보정이 필요해요.
-
-- 극열(極熱): 여름 + 화(火) 과다 → 수(水)로 식혀야
-- 극한(極寒): 겨울 + 수(水) 과다 → 화(火)로 따뜻하게
-- 풍습(風濕): 봄 + 목(木) 과다 → 금(金)으로 제어
-- 조조(燥熱): 가을 + 금(金) 과다 → 화(火)로 부드럽게
-- 토중(土重): 환절기 + 토(土) 과다 → 목(木)으로 뚫어야
-
-조후용신은 계절 불균형을 보정하는 오행이에요.`,
-  },
-  격국: {
-    title: "격국 (格局) 이란?",
-    content: `사주의 전체적인 구조와 특성을 나타내는 틀이에요.
-
-월지(月支) 지장간 중 천간에 투간(透干)된 글자를 기준으로 정해요.
-
-- 식신격: 창의·표현·베풂이 특기
-- 상관격: 반골 기질, 예술·기술에 강함
-- 편재격: 활동력·사업 기질 강함
-- 정재격: 성실·안정적 재물 운
-- 편관격: 도전·리더십·군경 기질
-- 정관격: 명예·책임감·공직 기질
-- 편인격: 직관·학문·철학 기질
-- 정인격: 학습·교육·문화 기질
-- 건록격: 독립심·자립 기질
-- 양인격: 강한 추진력·경쟁심
-
-격국은 타고난 적성과 기질을 나타내요.`,
-  },
-  억부용신: {
-    title: "억부용신 (抑扶用神) 이란?",
-    content: `신강·신약을 기준으로 일간의 균형을 맞추는 오행이에요.
-
-- 신강 → 억(抑): 강한 기운을 눌러줘야
-  식상·재성·관성이 용신 후보
-
-- 신약 → 부(扶): 약한 기운을 도와줘야
-  인성·비겁이 용신 후보
-
-- 용신 💎: 가장 필요한 오행 → 이 색상·방향 활용
-- 희신 ✨: 용신을 생해주는 오행 → 보조 활용
-- 기신 ⚠️: 용신을 극하는 오행 → 피해야
-- 구신 🔻: 기신을 생해주는 오행 → 조심
-- 한신 ➖: 중립 오행
-
-억부용신이 추천 색상·방향의 1순위 기준이에요.`,
   },
   최종용신: {
     title: "최종 용신 이란?",
@@ -270,22 +208,6 @@ const helpContents: Record<string, { title: string; content: string }> = {
 - 편인·정인: 일간을 생하는 오행 → 학습·충전
 
 음양이 같으면 편(偏), 다르면 정(正)이에요.`,
-  },
-  지지관계: {
-    title: "지지 합충형 이란?",
-    content: `일주 지지와 일진 지지의 관계예요.
-
-- 육합 ✨: 두 지지가 서로 합쳐져 조화로운 에너지
-  자축·인해·묘술·진유·사신·오미
-
-- 충 ⚡: 서로 정반대로 충돌하는 에너지
-  자오·축미·인신·묘유·진술·사해
-
-- 삼합 🌟: 세 지지가 모여 강한 시너지
-  신자진(水)·인오술(火)·해묘미(木)·사유축(金)
-
-- 형 ⚠️: 서로 마찰·갈등하는 에너지
-  인사신·축술미·자묘`,
   },
 };
 
@@ -322,7 +244,8 @@ const getColors = (
   }
 
   // 2순위: 극열·극한 조후 override
-  if (["극열", "극한"].includes(johu.status) && johu.yongsinEl) {
+  // 냉금·조조도 조후가 급한 상태라 override 대상에 포함한다.
+  if (["극열", "극한", "냉금", "조조"].includes(johu.status) && johu.yongsinEl) {
     targetEl = johu.yongsinEl;
     basis = `조후(${johu.status}) 기준`;
   }
@@ -363,7 +286,8 @@ const calcElementScore = (
   const allChars: string[] = [];
 
   allPillars.forEach((pillar) => {
-    if (!pillar || pillar === "미상") return;
+    // 시주 미상일 때 API는 "-", 내부 계산에서는 "미상"을 쓰므로 둘 다 거른다.
+    if (!pillar || pillar === "미상" || pillar === "-") return;
     if (pillar[0]) allChars.push(pillar[0]);
     if (pillar[1]) allChars.push(pillar[1]);
   });
@@ -384,7 +308,7 @@ const calcElementScore = (
   const dominant = Object.entries(percentage).find(([, v]) => v >= 45)?.[0] || null;
 
   const jiChars = allPillars
-    .filter((p) => p && p !== "미상")
+    .filter((p) => p && p !== "미상" && p !== "-")
     .map((p) => p[1])
     .filter(Boolean);
   const jiCount: Record<string, number> = {};
@@ -439,17 +363,18 @@ const calcStrength = (
   const allPillars = [saju.year, saju.month, saju.day, saju.hour];
 
   allPillars.forEach((pillar, pillarIdx) => {
-    if (!pillar || pillar === "미상") return;
+    if (!pillar || pillar === "미상" || pillar === "-") return;
     const gan = pillar[0];
     const ji = pillar[1];
 
     // 천간 계산
     if (gan) {
       const el = ganToElement[gan];
-      if (el) {
-        // 일간 자체는 제외
-        if (pillarIdx === 2 && gan === dayGan) return;
-
+      // 일간 자체는 비교 기준점이므로 점수에서 제외한다.
+      // 단 일지(득지)는 신강·신약의 핵심 변수라 반드시 계산해야 하므로,
+      // 여기서 pillar 전체를 건너뛰면 안 된다.
+      const isDayGan = pillarIdx === 2 && gan === dayGan;
+      if (el && !isDayGan) {
         // 월지 해당 오행이면 가중치 1.5배
         const isMonthJiEl = el === monthJiEl;
         const point = isMonthJiEl ? 1.5 : 1;
@@ -799,15 +724,21 @@ const calcYongsin = (
 };
 
 // ── 최종 용신 확정 ──
+// 만세력은 절대적 정답이 아니라 과거 통계에 기반한 경향값이다.
+// 그래서 하나의 용신을 단정하지 않고, 세 관점(억부·격국·조후)이 각각 어떤 오행을
+// 지목하는지 표로 모은 뒤 "얼마나 겹치는가 + 그 오행이 원국에 실제로 있는가"로
+// 신뢰도를 매긴다. 원국에 없는 오행(무근)은 지목이 겹쳐도 신뢰도를 낮춘다.
 const calcFinalYongsin = (
   yongsin: { yongsinEl: string; yongsin: string; heesinEl: string; heesin: string; gisinEl: string; gusinEl: string; },
   geokkuk: { yongsinEl: string; },
   johu: { yongsinEl: string; status: string; },
+  elementPercentage?: Record<string, number>,
 ): {
   finalYongsinEl: string;
   finalYongsin: string;
-  confidence: "확실" | "보통" | "참고";
+  confidence: "유력" | "경합" | "불확실";
   reason: string;
+  candidates: { el: string; name: string; votes: string[]; rootPct: number; rootless: boolean }[];
 } => {
   const elName: Record<string, string> = {
     목: "목(木)", 화: "화(火)", 토: "토(土)", 금: "금(金)", 수: "수(水)",
@@ -817,56 +748,91 @@ const calcFinalYongsin = (
   const 격국 = geokkuk.yongsinEl;
   const 조후 = johu.yongsinEl;
 
-  // 억부 + 격국 + 조후 모두 일치
-  if (억부 === 격국 && 억부 === 조후 && 조후) {
-    return {
-      finalYongsinEl: 억부,
-      finalYongsin: elName[억부],
-      confidence: "확실",
-      reason: `억부용신·격국용신·조후용신이 모두 ${elName[억부]}으로 일치해요. 매우 확실한 용신이에요.`,
-    };
+  // 조후가 급한 계절 상태. 이 경우 조후 의견의 무게를 억부와 동등하게 본다.
+  const johuUrgent = ["극열", "극한", "냉금", "조조"].includes(johu.status);
+
+  // 1) 세 관점의 지목을 오행별로 집계
+  const votes = new Map<string, string[]>();
+  const addVote = (el: string, who: string) => {
+    if (!el) return;
+    votes.set(el, [...(votes.get(el) ?? []), who]);
+  };
+  addVote(억부, "억부");
+  addVote(격국, "격국");
+  addVote(조후, johuUrgent ? `조후(${johu.status})` : "조후");
+
+  const pct = elementPercentage ?? {};
+  const candidates = [...votes.entries()]
+    .map(([el, who]) => {
+      const rootPct = pct[el] ?? 0;
+      return {
+        el,
+        name: elName[el] ?? el,
+        votes: who,
+        rootPct,
+        // 무근(無根): 원국에 해당 오행이 한 글자도 없으면 용신으로 삼아도 쓸 실체가 없다
+        rootless: elementPercentage ? rootPct === 0 : false,
+      };
+    })
+    // 표 많은 순 → 원국 비중 높은 순
+    .sort((a, b) => b.votes.length - a.votes.length || b.rootPct - a.rootPct);
+
+  // 2) 대표 후보 선정. 조후가 급한데 억부 후보가 무근이면 조후 후보로 넘긴다.
+  let top = candidates[0] ?? {
+    el: 억부, name: elName[억부] ?? "균형", votes: ["억부"], rootPct: 0, rootless: false,
+  };
+  const johuCand = candidates.find((c) => c.el === 조후);
+  if (johuUrgent && johuCand && top.rootless && !johuCand.rootless) {
+    top = johuCand;
   }
 
-  // 억부 + 격국 일치
-  if (억부 === 격국) {
-    return {
-      finalYongsinEl: 억부,
-      finalYongsin: elName[억부],
-      confidence: "확실",
-      reason: `억부용신과 격국용신이 ${elName[억부]}으로 일치해요. 확실한 용신이에요.${조후 && 조후 !== 억부 ? ` 조후는 ${elName[조후]}을 보조 활용하세요.` : ""}`,
-    };
+  // 3) 신뢰도: 관점이 얼마나 겹치는지 + 그 오행이 원국에 실재하는지
+  let confidence: "유력" | "경합" | "불확실";
+  if (top.votes.length >= 2 && !top.rootless) {
+    confidence = "유력";
+  } else if (top.votes.length >= 2 || (!top.rootless && candidates.length <= 2)) {
+    confidence = "경합";
+  } else {
+    confidence = "불확실";
+  }
+  // 조후가 급한 계절인데 대표 후보가 조후와 다르면 최소 '경합'으로 내린다
+  if (confidence === "유력" && johuUrgent && 조후 && top.el !== 조후) {
+    confidence = "경합";
   }
 
-  // 억부 + 조후 일치
-  if (억부 === 조후 && 조후) {
-    return {
-      finalYongsinEl: 억부,
-      finalYongsin: elName[억부],
-      confidence: "확실",
-      reason: `억부용신과 조후용신이 ${elName[억부]}으로 일치해요. 계절 에너지까지 맞는 강한 용신이에요.`,
-    };
+  // 4) 근거 문장 — 단정 대신 경향으로 서술
+  const parts: string[] = [];
+  parts.push(
+    candidates
+      .map((c) => `${c.votes.join("·")} → ${c.name}${c.rootless ? "(원국에 없음)" : ` ${c.rootPct}%`}`)
+      .join(" / "),
+  );
+  if (top.votes.length >= 2) {
+    parts.push(`${top.votes.length}개 관점이 ${top.name}에 모여요.`);
+  } else {
+    parts.push(`관점마다 지목이 갈려요. 우선 후보는 ${top.name}입니다.`);
   }
-
-  // 희신이 격국용신과 일치
-  if (yongsin.heesinEl === 격국) {
-    return {
-      finalYongsinEl: 억부,
-      finalYongsin: elName[억부],
-      confidence: "보통",
-      reason: `억부용신은 ${elName[억부]}, 격국용신 ${elName[격국]}은 희신으로 작용해요. 두 오행을 함께 활용하면 좋아요.`,
-    };
+  if (top.rootless) {
+    parts.push(`다만 ${top.name}은 원국에 한 글자도 없어 실제로 쓸 기운이 약해요.`);
   }
+  if (johuUrgent && 조후 && top.el !== 조후) {
+    parts.push(`계절이 ${johu.status} 상태라 조후 ${elName[조후]} 쪽도 함께 보세요.`);
+  }
+  parts.push("만세력은 과거 통계에 기반한 경향이라 참고 범위로만 활용하세요.");
 
-  // 셋 다 다른 경우 → 억부용신 우선
   return {
-    finalYongsinEl: 억부,
-    finalYongsin: elName[억부],
-    confidence: "참고",
-    reason: `억부용신 ${elName[억부]}을 우선으로 하되, 격국용신 ${elName[격국]}과 조후용신 ${조후 ? elName[조후] : "없음"}을 참고하세요. 사주 구조가 복합적이에요.`,
+    finalYongsinEl: top.el,
+    finalYongsin: top.name,
+    confidence,
+    reason: parts.join(" "),
+    candidates,
   };
 };
 
 // ── 궁합 분석 ──
+// 궁합은 점수가 아니라 경향으로 표기한다. 순조 > 무난 > 조율필요.
+type Tendency = "순조" | "무난" | "조율필요";
+
 const calcCompatibility = (
   mySaju: { year: string; month: string; day: string; hour: string },
   myDayPillar: string,
@@ -874,126 +840,108 @@ const calcCompatibility = (
   partnerDayPillar: string,
 ): {
   dayPillarRelation: { type: string; desc: string } | null;
-  elementBalance: { desc: string; score: number };
-  strengthBalance: { desc: string; score: number };
-  totalScore: number;
-  grade: "천생연분" | "좋은궁합" | "보통궁합" | "노력필요";
+  axes: { key: string; label: string; tendency: Tendency; detail: string; desc: string }[];
+  overall: string;
+  agreement: "일치" | "엇갈림" | "제각각";
   summary: string;
 } => {
-  // 1. 일주 지지 합충형
-  const myJi = myDayPillar[1];
-  const partnerJi = partnerDayPillar[1];
-  const dayPillarRelation = getJijiRelation(myJi, partnerJi);
+  const hanja: Record<string, string> = { 목: "木", 화: "火", 토: "土", 금: "金", 수: "水" };
+  const elLabel = (el: string) => (el ? `${el}(${hanja[el] ?? "?"})` : "알 수 없음");
 
-  // 2. 일주 천간 관계 (십신)
-  const myGan = myDayPillar[0];
-  const partnerGan = partnerDayPillar[0];
-  const myEl = ganToElement[myGan];
-  const partnerEl = ganToElement[partnerGan];
-
-  // 3. 오행 보완 관계 점수
-  const gen: Record<string, string> = {
-    목: "화", 화: "토", 토: "금", 금: "수", 수: "목",
-  };
-  const con: Record<string, string> = {
-    목: "토", 화: "금", 토: "수", 금: "목", 수: "화",
-  };
-
-  let elementScore = 50;
-  let elementDesc = "";
-
-  if (myEl === partnerEl) {
-    elementScore = 60;
-    elementDesc = `두 사람 모두 ${myEl}(${myEl}) 기운이에요. 비슷한 성향으로 공감대는 높지만 경쟁심이 생길 수 있어요.`;
-  } else if (gen[myEl] === partnerEl) {
-    elementScore = 85;
-    elementDesc = `내가 상대를 생해주는 관계예요 (${myEl}→${partnerEl}). 내가 베풀고 상대가 받는 따뜻한 관계예요.`;
-  } else if (gen[partnerEl] === myEl) {
-    elementScore = 85;
-    elementDesc = `상대가 나를 생해주는 관계예요 (${partnerEl}→${myEl}). 상대에게 든든한 지원을 받는 관계예요.`;
-  } else if (con[myEl] === partnerEl) {
-    elementScore = 40;
-    elementDesc = `내가 상대를 극하는 관계예요 (${myEl}→${partnerEl}). 나도 모르게 상대에게 압박을 줄 수 있어요.`;
-  } else if (con[partnerEl] === myEl) {
-    elementScore = 40;
-    elementDesc = `상대가 나를 극하는 관계예요 (${partnerEl}→${myEl}). 상대로부터 자극과 긴장을 받는 관계예요.`;
-  }
-
-  // 4. 신강/신약 균형 점수
-  const myStrength = calcStrength(mySaju, myDayPillar, mySaju.month ? myDayPillar : myDayPillar);
-  const partnerStrength = calcStrength(partnerSaju, partnerDayPillar, partnerDayPillar);
-
-  let strengthScore = 50;
-  let strengthDesc = "";
-
-  const myS = myStrength.strength;
-  const partnerS = partnerStrength.strength;
-
-  if (myS === "신강" && partnerS === "신약") {
-    strengthScore = 80;
-    strengthDesc = "내가 신강, 상대가 신약이에요. 내가 리드하고 상대가 따르는 안정적인 균형이에요.";
-  } else if (myS === "신약" && partnerS === "신강") {
-    strengthScore = 80;
-    strengthDesc = "상대가 신강, 내가 신약이에요. 상대가 리드하고 내가 따르는 안정적인 균형이에요.";
-  } else if (myS === "중화" && partnerS === "중화") {
-    strengthScore = 90;
-    strengthDesc = "두 사람 모두 중화예요. 서로 균형 잡힌 에너지로 조화롭게 맞춰갈 수 있어요.";
-  } else if (myS === "신강" && partnerS === "신강") {
-    strengthScore = 50;
-    strengthDesc = "두 사람 모두 신강이에요. 에너지가 강해 서로 충돌할 수 있지만 강한 파트너십도 가능해요.";
-  } else if (myS === "신약" && partnerS === "신약") {
-    strengthScore = 55;
-    strengthDesc = "두 사람 모두 신약이에요. 서로 의지하며 버티는 관계지만 서로를 지지해주는 따뜻함이 있어요.";
-  } else {
-    strengthScore = 65;
-    strengthDesc = `내가 ${myS}, 상대가 ${partnerS}이에요. 서로 다른 에너지로 보완하는 관계예요.`;
-  }
-
-  // 5. 지지 관계 점수
-  let relationScore = 60;
+  // ── 축 1. 일주 지지 관계 ──
+  const dayPillarRelation = getJijiRelation(myDayPillar[1], partnerDayPillar[1]);
+  let jiTendency: Tendency = "무난";
+  let jiDetail = "특별한 관계 없음";
   if (dayPillarRelation) {
-    if (dayPillarRelation.type.includes("육합") || dayPillarRelation.type.includes("삼합")) {
-      relationScore = 90;
-    } else if (dayPillarRelation.type.includes("충")) {
-      relationScore = 35;
-    } else if (dayPillarRelation.type.includes("형")) {
-      relationScore = 40;
+    jiDetail = dayPillarRelation.type;
+    if (/육합|삼합/.test(dayPillarRelation.type)) jiTendency = "순조";
+    else if (/충|형/.test(dayPillarRelation.type)) jiTendency = "조율필요";
+  }
+  const jiDesc = dayPillarRelation?.desc ?? "일주 지지 간 합충형 관계가 없어요. 서로 강하게 끌리지도, 부딪히지도 않는 편이에요.";
+
+  // ── 축 2. 일간 오행 관계 ──
+  const gen: Record<string, string> = { 목: "화", 화: "토", 토: "금", 금: "수", 수: "목" };
+  const con: Record<string, string> = { 목: "토", 화: "금", 토: "수", 금: "목", 수: "화" };
+  const myEl = ganToElement[myDayPillar[0]];
+  const partnerEl = ganToElement[partnerDayPillar[0]];
+
+  let elTendency: Tendency = "무난";
+  let elDetail = "알 수 없음";
+  let elDesc = "일간 오행을 확인할 수 없어 오행 관계는 생략했어요.";
+  if (myEl && partnerEl) {
+    if (myEl === partnerEl) {
+      elTendency = "무난";
+      elDetail = `둘 다 ${elLabel(myEl)}`;
+      elDesc = `두 사람 모두 ${elLabel(myEl)} 기운이에요. 비슷한 성향이라 공감대는 높지만 같은 자리를 두고 경쟁심이 생길 수 있어요.`;
+    } else if (gen[myEl] === partnerEl) {
+      elTendency = "순조";
+      elDetail = `${myEl}→${partnerEl} 상생`;
+      elDesc = `내가 상대를 생해주는 관계예요 (${elLabel(myEl)}→${elLabel(partnerEl)}). 내가 베풀고 상대가 받는 흐름이 자연스러워요.`;
+    } else if (gen[partnerEl] === myEl) {
+      elTendency = "순조";
+      elDetail = `${partnerEl}→${myEl} 상생`;
+      elDesc = `상대가 나를 생해주는 관계예요 (${elLabel(partnerEl)}→${elLabel(myEl)}). 상대에게 지원을 받는 흐름이에요.`;
+    } else if (con[myEl] === partnerEl) {
+      elTendency = "조율필요";
+      elDetail = `${myEl}→${partnerEl} 상극`;
+      elDesc = `내가 상대를 극하는 관계예요 (${elLabel(myEl)}→${elLabel(partnerEl)}). 의도치 않게 상대에게 압박을 줄 수 있어요.`;
+    } else if (con[partnerEl] === myEl) {
+      elTendency = "조율필요";
+      elDetail = `${partnerEl}→${myEl} 상극`;
+      elDesc = `상대가 나를 극하는 관계예요 (${elLabel(partnerEl)}→${elLabel(myEl)}). 상대로부터 자극과 긴장을 받는 편이에요.`;
     }
   }
 
-  // 6. 총점 계산 (가중치)
-  const totalScore = Math.round(
-    relationScore * 0.35 +
-    elementScore * 0.35 +
-    strengthScore * 0.30
-  );
+  // ── 축 3. 신강·신약 조합 ──
+  // calcStrength의 3번째 인자는 '월주'다. 일주를 넘기면 월령 가중치가 엉뚱한 지지에 걸려
+  // 같은 사람이 운세 탭과 다른 판정을 받는다.
+  const myS = calcStrength(mySaju, myDayPillar, mySaju.month).strength;
+  const partnerS = calcStrength(partnerSaju, partnerDayPillar, partnerSaju.month).strength;
 
-  // 7. 등급
-  let grade: "천생연분" | "좋은궁합" | "보통궁합" | "노력필요";
-  let summary = "";
-
-  if (totalScore >= 80) {
-    grade = "천생연분";
-    summary = "두 사람은 서로를 자연스럽게 끌어당기는 강한 인연이에요. 함께할수록 시너지가 커져요.";
-  } else if (totalScore >= 65) {
-    grade = "좋은궁합";
-    summary = "두 사람은 잘 맞는 편이에요. 서로의 다른 점을 인정하면 좋은 관계를 유지할 수 있어요.";
-  } else if (totalScore >= 50) {
-    grade = "보통궁합";
-    summary = "두 사람은 노력하면 좋은 관계가 될 수 있어요. 서로를 이해하는 소통이 중요해요.";
+  let stTendency: Tendency = "무난";
+  let stDesc: string;
+  if (myS === "중화" && partnerS === "중화") {
+    stTendency = "순조";
+    stDesc = "두 사람 모두 중화예요. 균형 잡힌 에너지끼리라 서로 맞춰가기 수월한 편이에요.";
+  } else if ((myS === "신강" && partnerS === "신약") || (myS === "신약" && partnerS === "신강")) {
+    stTendency = "순조";
+    stDesc = `내가 ${myS}, 상대가 ${partnerS}예요. 한쪽이 이끌고 한쪽이 받쳐주는 형태라 역할이 잘 나뉘는 편이에요.`;
+  } else if (myS === "신강" && partnerS === "신강") {
+    stTendency = "조율필요";
+    stDesc = "두 사람 모두 신강이에요. 에너지가 강한 쪽끼리라 주도권에서 부딪히기 쉬워요.";
+  } else if (myS === "신약" && partnerS === "신약") {
+    stTendency = "무난";
+    stDesc = "두 사람 모두 신약이에요. 서로 의지하는 따뜻함은 있지만 결정을 미루기 쉬운 편이에요.";
   } else {
-    grade = "노력필요";
-    summary = "두 사람은 성향 차이가 있어요. 서로의 차이를 이해하고 배려하는 노력이 특히 필요해요.";
+    stTendency = "무난";
+    stDesc = `내가 ${myS}, 상대가 ${partnerS}예요. 에너지 크기가 달라 서로 보완할 여지가 있어요.`;
   }
 
-  return {
-    dayPillarRelation,
-    elementBalance: { desc: elementDesc, score: elementScore },
-    strengthBalance: { desc: strengthDesc, score: strengthScore },
-    totalScore,
-    grade,
-    summary,
+  const axes = [
+    { key: "지지", label: "일주 지지", tendency: jiTendency, detail: jiDetail, desc: jiDesc },
+    { key: "오행", label: "일간 오행", tendency: elTendency, detail: elDetail, desc: elDesc },
+    { key: "강약", label: "신강·신약", tendency: stTendency, detail: `${myS} ↔ ${partnerS}`, desc: stDesc },
+  ];
+
+  // ── 종합: 가중 평균 대신 세 축의 다수결 + 일치도 ──
+  // 가중치(35/35/30)나 등급 컷(80/65/50)은 근거 없는 임의값이라 쓰지 않는다.
+  const count = (t: Tendency) => axes.filter((a) => a.tendency === t).length;
+  const majority = (["순조", "조율필요", "무난"] as Tendency[]).find((t) => count(t) >= 2);
+  const top = majority ?? "무난";
+  const agreement: "일치" | "엇갈림" | "제각각" =
+    count(top) === 3 ? "일치" : majority ? "엇갈림" : "제각각";
+
+  const overall =
+    top === "순조" ? "순조로운 편" : top === "조율필요" ? "조율이 필요한 편" : "무난한 편";
+
+  const summaryBy: Record<string, string> = {
+    일치: `세 관점이 모두 같은 방향을 가리켜요. 그만큼 이 경향이 뚜렷하게 나타나는 조합이에요.`,
+    엇갈림: `세 관점 중 둘이 같은 방향이고 하나가 달라요. 대체로 ${overall}이지만 예외가 있는 조합이에요.`,
+    제각각: `세 관점이 제각각이에요. 한마디로 정리하기 어려운 조합이라 참고 정도로만 보세요.`,
   };
+  const summary = `${summaryBy[agreement]} 만세력 궁합은 과거 통계에 기반한 경향이지 관계의 성패를 정하지 않아요.`;
+
+  return { dayPillarRelation, axes, overall, agreement, summary };
 };
 
 // ── 조후 판단 ──
@@ -1191,14 +1139,6 @@ const getJijiRelation = (dayJi: string, targetJi: string) => {
 // ── 지지 추출 ──
 const pillarToJi = (pillar: string) => pillar[1] || "";
 
-const tenGodColor: Record<string, string> = {
-  비견: "#6c63ff", 겁재: "#6c63ff",
-  식신: "#00d4aa", 상관: "#00d4aa",
-  편재: "#D85A30", 정재: "#D85A30",
-  편관: "#ff6b6b", 정관: "#ff6b6b",
-  편인: "#a78bfa", 정인: "#a78bfa",
-};
-
 // ── 십신 계산 ──
 const getTenGod = (dayGan: string, targetGan: string): string => {
   const dayEl = ganToElement[dayGan];
@@ -1232,33 +1172,6 @@ const tenGodDesc: Record<string, { energy: string; advice: string; caution: stri
   정인: { energy: "학습·휴식·내면 정리의 기운이 강한 날", advice: "차분하게 공부하거나 생각을 정리하기 좋아요. 몸과 마음을 충전하는 날로 쓰기에 딱 맞아요.", caution: "너무 수동적이 되거나 의존적이 될 수 있어요. 작은 행동이라도 직접 실천하는 습관을 유지하세요.", activity: "여유로운 실내 활동이 잘 맞아요. 피아노 치거나 책 읽기 딱 좋고, 외출은 가벼운 산책 정도가 어울려요." },
 };
 
-// ── 조후 카드 배경색 ──
-const johuBg: Record<string, string> = {
-  극열: "rgba(216,90,48,0.1)",
-  극한: "rgba(24,95,165,0.1)",
-  풍습: "rgba(59,109,17,0.1)",
-  조조: "rgba(186,117,23,0.1)",
-  토중: "rgba(136,135,128,0.1)",
-  평이: "rgba(108,99,255,0.05)",
-  냉금: "rgba(24,95,165,0.1)",
-};
-
-const johuBorder: Record<string, string> = {
-  극열: "rgba(216,90,48,0.3)",
-  극한: "rgba(24,95,165,0.3)",
-  풍습: "rgba(59,109,17,0.3)",
-  조조: "rgba(186,117,23,0.3)",
-  토중: "rgba(136,135,128,0.3)",
-  평이: "rgba(108,99,255,0.2)",
-  냉금: "rgba(24,95,165,0.3)",
-};
-
-const johuTextColor: Record<string, string> = {
-  극열: "#D85A30", 극한: "#185FA5", 풍습: "#3B6D11",
-  조조: "#BA7517", 토중: "#888780", 평이: "#6c63ff",
-  냉금: "#185FA5",
-};
-
 export default function Home() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -1276,7 +1189,7 @@ export default function Home() {
 
   const [birth, setBirth] = useState<BirthInfo>({
     year: "", month: "", day: "", hour: "", minute: "",
-    name: "", unknownHour: false, isLunar: false,
+    name: "", unknownHour: false, isLunar: false, isLeapMonth: false,
   });
   const [targetDate, setTargetDate] = useState(() => {
     const today = new Date();
@@ -1287,6 +1200,9 @@ export default function Home() {
   });
   const [result, setResult] = useState<FortuneResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [aiFortune, setAiFortune] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [activeTab, setActiveTab] = useState<"fortune" | "birth" | "compatibility">("fortune");
   
@@ -1297,7 +1213,7 @@ export default function Home() {
   const [addingPartner, setAddingPartner] = useState(false);
   const [newPartner, setNewPartner] = useState<PartnerInfo>({
     id: "", name: "", year: "", month: "", day: "", hour: "",
-    unknownHour: false, isLunar: false,
+    unknownHour: false, isLunar: false, isLeapMonth: false,
   });
 
   useEffect(() => {
@@ -1355,10 +1271,11 @@ export default function Home() {
         body: JSON.stringify({
           birthYear: birth.year, birthMonth: birth.month, birthDay: birth.day,
           birthHour: birth.hour, unknownHour: birth.unknownHour,
-          isLunar: birth.isLunar, targetDate: targetDate,
+          isLunar: birth.isLunar, isLeapMonth: birth.isLeapMonth, targetDate: targetDate,
         }),
       });
       const myData = await myRes.json();
+      if (!myRes.ok) { alert(myData.error || "내 사주를 계산하지 못했어요."); return; }
 
       // 상대방 사주 API 호출
       const partnerRes = await fetch("/api/saju", {
@@ -1367,10 +1284,11 @@ export default function Home() {
         body: JSON.stringify({
           birthYear: partner.year, birthMonth: partner.month, birthDay: partner.day,
           birthHour: partner.hour, unknownHour: partner.unknownHour,
-          isLunar: partner.isLunar, targetDate: targetDate,
+          isLunar: partner.isLunar, isLeapMonth: partner.isLeapMonth, targetDate: targetDate,
         }),
       });
       const partnerData = await partnerRes.json();
+      if (!partnerRes.ok) { alert(partnerData.error || `${partner.name || "상대방"}의 사주를 계산하지 못했어요.`); return; }
 
       // 궁합 계산
       const compat = calcCompatibility(
@@ -1403,7 +1321,7 @@ export default function Home() {
     const updated = [...partners, partner];
     setPartners(updated);
     localStorage.setItem("partners", JSON.stringify(updated));
-    setNewPartner({ id: "", name: "", year: "", month: "", day: "", hour: "", unknownHour: false, isLunar: false });
+    setNewPartner({ id: "", name: "", year: "", month: "", day: "", hour: "", unknownHour: false, isLunar: false, isLeapMonth: false });
     setAddingPartner(false);
     setSelectedPartner(partner);
     analyzeCompatibility(partner);
@@ -1454,7 +1372,7 @@ export default function Home() {
         body: JSON.stringify({
           birthYear: birth.year, birthMonth: birth.month, birthDay: birth.day,
           birthHour: birth.hour, unknownHour: birth.unknownHour,
-          isLunar: birth.isLunar, targetDate: useDate, 
+          isLunar: birth.isLunar, isLeapMonth: birth.isLeapMonth, targetDate: useDate, 
         }),
       });
       const data = await res.json();
@@ -1468,12 +1386,15 @@ export default function Home() {
       const tenGod = getTenGod(dayGan, dayPillarGan);
       const jijiRelation = getJijiRelation(dayJi, dayPillarJi);
       const desc = tenGodDesc[tenGod] || tenGodDesc["비견"];
-      const elementResult = calcElementScore(data.saju, data.dayPillar, data.monthPillar);
-      const johu = getJohu(data.monthPillar, data.dayPillar, elementResult.scores, elementResult.total);
-      const strengthResult = calcStrength(data.saju, data.dayPillar, data.monthPillar);
-      const geokkukResult = calcGeokkuk(data.saju, data.dayPillar, data.monthPillar);
-      const yongsinResult = calcYongsin(strengthResult, geokkukResult, data.dayPillar, data.monthPillar);
-      const finalYongsinResult = calcFinalYongsin(yongsinResult, geokkukResult, johu);
+      // 신강·신약, 격국, 용신, 조후는 모두 "원국" 속성이라 사주 원국의 일주·월주를 기준으로 계산한다.
+      // (오늘 일진을 넘기면 같은 사람의 격국이 날짜마다 바뀌고, 같은 날 모든 사용자가 같은 격국이 된다)
+      // 반면 십신·지지관계는 "원국 일간 vs 오늘 일진"이라 아래에서 그대로 일진을 쓴다.
+      const elementResult = calcElementScore(data.saju, data.dayPillar, data.saju.month);
+      const johu = getJohu(data.saju.month, data.saju.day, elementResult.scores, elementResult.total);
+      const strengthResult = calcStrength(data.saju, data.saju.day, data.saju.month);
+      const geokkukResult = calcGeokkuk(data.saju, data.saju.day, data.saju.month);
+      const yongsinResult = calcYongsin(strengthResult, geokkukResult, data.saju.day, data.saju.month);
+      const finalYongsinResult = calcFinalYongsin(yongsinResult, geokkukResult, johu, elementResult.percentage);
 
       const colorInfo = getColors(
         data.saju.day,
@@ -1487,7 +1408,7 @@ export default function Home() {
         ? `⚠️ 지지 삼중첩(${elementResult.tripleChar}${elementResult.tripleChar}${elementResult.tripleChar}) 감지 — 해당 오행이 극도로 강해져 편중된 에너지가 작용해요. 오늘은 특히 균형에 주의하세요.`
         : null;
 
-      setResult({
+      const fortuneResult: FortuneResult = {
         ...data,
         analysis: {
           tenGod, jijiRelation,
@@ -1506,9 +1427,65 @@ export default function Home() {
           yongsin: yongsinResult,
           finalYongsin: finalYongsinResult,
         },
-      });
+      };
+
+      setResult(fortuneResult);
+      // 계산은 위에서 끝났고, 아래는 그 결과값을 넘겨 해석 문장만 받아온다.
+      fetchAiFortune(fortuneResult, useDate);
     } catch { alert("분석 중 오류가 발생했어요."); }
     finally { setLoading(false); }
+  };
+
+  // 만세력 계산 결과를 Claude에게 넘겨 오늘의 운세 문장을 생성한다.
+  const fetchAiFortune = async (data: FortuneResult, useDate: string) => {
+    setAiLoading(true);
+    setAiFortune(null);
+    setAiError(null);
+    try {
+      const res = await fetch("/api/fortune", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetDate: useDate,
+          saju: data.saju,
+          dayPillar: data.dayPillar,
+          monthPillar: data.monthPillar,
+          yearPillar: data.yearPillar,
+          analysis: {
+            tenGod: data.analysis.tenGod,
+            energy: data.analysis.energy,
+            jijiRelation: data.analysis.jijiRelation,
+            direction: data.analysis.direction,
+            colors: data.analysis.colors,
+            elementScore: {
+              percentage: data.analysis.elementScore.percentage,
+              dominant: data.analysis.elementScore.dominant,
+              tripleChar: data.analysis.elementScore.tripleChar,
+            },
+            strength: data.analysis.strength,
+            geokkuk: data.analysis.geokkuk,
+            johu: data.analysis.johu,
+            finalYongsin: {
+              finalYongsin: data.analysis.finalYongsin.finalYongsin,
+              confidence: data.analysis.finalYongsin.confidence,
+              candidates: data.analysis.finalYongsin.candidates?.map((c) => ({
+                name: c.name, votes: c.votes, rootless: c.rootless,
+              })),
+            },
+          },
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setAiError(json.error || "운세 생성에 실패했어요.");
+        return;
+      }
+      setAiFortune(json.text);
+    } catch {
+      setAiError("운세 생성 중 네트워크 오류가 발생했어요.");
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   const inputStyle: React.CSSProperties = {
@@ -1715,12 +1692,26 @@ export default function Home() {
             {/* 양력/음력 */}
             <div style={{ display: "flex", gap: 4, marginBottom: 16, background: "var(--bg)", borderRadius: 8, padding: 4 }}>
               {[["solar", "양력"], ["lunar", "음력"]].map(([val, label]) => (
-                <button key={val} onClick={() => setBirth({ ...birth, isLunar: val === "lunar" })}
+                <button key={val} onClick={() => setBirth({ ...birth, isLunar: val === "lunar", isLeapMonth: val === "lunar" && birth.isLeapMonth })}
                   style={{ flex: 1, padding: "8px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 14, fontWeight: 600, fontFamily: "inherit", background: (val === "lunar") === birth.isLunar ? "var(--accent)" : "transparent", color: (val === "lunar") === birth.isLunar ? "white" : "var(--muted)", transition: "all 0.2s" }}>
                   {label}
                 </button>
               ))}
             </div>
+
+            {birth.isLunar && (
+              <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 14, cursor: "pointer" }}>
+                <input type="checkbox" checked={!!birth.isLeapMonth}
+                  onChange={(e) => setBirth({ ...birth, isLeapMonth: e.target.checked })}
+                  style={{ width: 16, height: 16, marginTop: 2, accentColor: "var(--accent)", cursor: "pointer", flexShrink: 0 }} />
+                <span style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.6 }}>
+                  윤달이에요
+                  <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
+                    같은 음력 날짜라도 윤달이면 양력 날짜가 달라져요. 윤달이 아니면 체크하지 마세요.
+                  </span>
+                </span>
+              </label>
+            )}
 
             {birth.isLunar && (
               <div style={{ background: "rgba(108,99,255,0.1)", border: "1px solid rgba(108,99,255,0.3)", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "var(--accent)", marginBottom: 14, lineHeight: 1.6 }}>
@@ -1803,134 +1794,73 @@ export default function Home() {
             {/* ── 결과 ── */}
             {result && (
               <div>
-                {/* 일진·사주 원국 */}
-                <div style={{ background: "var(--bg2)", borderRadius: 12, padding: 16, marginBottom: 12 }}>
-                  <p style={{ fontSize: 11, color: "#6c63ff", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 12 }}>// 오늘 일진 <HelpButton id="일진" /></p>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
-                    {[["세운", result.yearPillar], ["월건", result.monthPillar], ["일진", result.dayPillar]].map(([label, value]) => (
-                      <div key={label} style={{ background: "var(--card)", borderRadius: 8, padding: "12px 8px", textAlign: "center" }}>
-                        <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 6 }}>{label}</div>
-                        <div style={{ fontSize: 20, fontWeight: 700, color: "#00d4aa" }}>{value}</div>
-                      </div>
-                    ))}
+                {/* 사주 원국 + 오늘 일진 (요약) */}
+                <div style={{ background: "var(--bg2)", borderRadius: 12, padding: "12px 16px", marginBottom: 12 }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 6 }}>
+                    <span style={{ fontSize: 11, color: "var(--muted)", minWidth: 30 }}>사주</span>
+                    <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text)", letterSpacing: "0.02em" }}>
+                      {[result.saju.year, result.saju.month, result.saju.day, result.saju.hour].join(" ")}
+                    </span>
+                    <HelpButton id="사주원국" />
+                  </div>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+                    <span style={{ fontSize: 11, color: "var(--muted)", minWidth: 30 }}>오늘</span>
+                    <span style={{ fontSize: 15, fontWeight: 600, color: "#00d4aa" }}>{result.dayPillar}</span>
+                    <span style={{ fontSize: 12, color: "var(--muted)" }}>
+                      {result.analysis.tenGod}
+                      {result.analysis.jijiRelation ? ` · ${result.analysis.jijiRelation.type}` : ""}
+                    </span>
+                    <HelpButton id="일진" />
                   </div>
                   {result.isLunar && result.convertedSolar && (
-                    <div style={{ fontSize: 12, color: "var(--accent2)", marginBottom: 10 }}>
+                    <div style={{ fontSize: 12, color: "var(--accent2)", marginTop: 8 }}>
                       음력 → 양력 변환: {result.convertedSolar.year}년 {result.convertedSolar.month}월 {result.convertedSolar.day}일
                     </div>
                   )}
-                  <p style={{ fontSize: 11, color: "#6c63ff", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>// 사주 원국 <HelpButton id="사주원국" /></p>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
-                    {[["시", result.saju.hour], ["일", result.saju.day], ["월", result.saju.month], ["년", result.saju.year]].map(([label, value]) => (
-                      <div key={label} style={{ background: "var(--card2)", borderRadius: 8, padding: "10px 6px", textAlign: "center" }}>
-                        <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>{label}</div>
-                        <div style={{ fontSize: 16, fontWeight: 600, color: value === "-" ? "var(--muted)" : "var(--text)" }}>{value}</div>
-                      </div>
-                    ))}
-                  </div>
                 </div>
 
-                {/* 오행 점수 */}
+                {/* 오늘의 해석 (Claude) */}
                 <div style={{ background: "var(--bg2)", borderRadius: 12, padding: 16, marginBottom: 12 }}>
-                  <p style={{ fontSize: 11, color: "var(--accent)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 12 }}>// 오행 점수 <HelpButton id="오행점수" /></p>
-                  {Object.entries(result.analysis.elementScore.scores).map(([el, score]) => {
-                    const pct = result.analysis.elementScore.percentage[el];
-                    const elColor: Record<string, string> = {
-                      목: "#3B6D11", 화: "#D85A30", 토: "#BA7517", 금: "#888780", 수: "#185FA5"
-                    };
-                    const isDominant = result.analysis.elementScore.dominant === el;
-                    const isYongsin = result.analysis.yongsin?.yongsinEl === el;
-                    const isHeesin = result.analysis.yongsin?.heesinEl === el;
-                    const isGisin = result.analysis.yongsin?.gisinEl === el;
-                    const isGusin = result.analysis.yongsin?.gusinEl === el;
-
-                    const tag = isYongsin ? "용신 💎"
-                      : isHeesin ? "희신 ✨"
-                      : isGisin ? "기신 ⚠️"
-                      : isGusin ? "구신 🔻"
-                      : isDominant ? "과다 ⚡"
-                      : "";
-
-                    const tagColor = isYongsin ? "#00d4aa"
-                      : isHeesin ? "#a78bfa"
-                      : isGisin ? "#ff6b6b"
-                      : isGusin ? "#f59e0b"
-                      : isDominant ? "#ff6b6b"
-                      : "var(--muted)";
-
-                    return (
-                      <div key={el} style={{ marginBottom: 10 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ color: "var(--text)", fontWeight: tag ? 700 : 400 }}>{el}</span>
-                            {tag && (
-                              <span style={{ fontSize: 10, color: tagColor, background: `${tagColor}20`, padding: "1px 6px", borderRadius: 10 }}>
-                                {tag}
-                              </span>
-                            )}
-                          </div>
-                          <span style={{ color: "var(--muted)" }}>{score}점 ({pct}%)</span>
-                        </div>
-                        <div style={{ height: 6, background: "var(--card)", borderRadius: 3, overflow: "hidden" }}>
-                          <div style={{ height: "100%", width: `${pct}%`, background: elColor[el], borderRadius: 3, transition: "width 0.5s", opacity: isGisin || isGusin ? 0.5 : 1 }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* 조후 판단 */}
-                <div style={{ background: johuBg[result.analysis.johu.status], border: `1px solid ${johuBorder[result.analysis.johu.status]}`, borderRadius: 12, padding: 16, marginBottom: 12 }}>
-                  <p style={{ fontSize: 11, color: johuTextColor[result.analysis.johu.status], letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10 }}>
-                    // 조후 판단 — {result.analysis.johu.label} <HelpButton id="조후" />
-                  </p>
-                  {result.analysis.johu.yongsin && (
-                    <p style={{ fontSize: 14, color: "var(--text)", marginBottom: 10 }}>
-                      용신: <strong style={{ fontWeight: 700 }}>{result.analysis.johu.yongsin}</strong> — 오늘은 {result.analysis.johu.yongsin} 기운으로 균형을 잡아야 해요.
-                    </p>
+                  <p style={{ fontSize: 11, color: "var(--accent)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 12 }}>// 오늘의 해석 <HelpButton id="십신" /></p>
+                  {/* Claude 해석 — 위 계산 결과를 넘겨 생성한 문장 */}
+                  {aiLoading && (
+                    <div style={{ background: "var(--card)", borderRadius: 8, padding: "14px 16px" }}>
+                      <div style={{ fontSize: 11, color: "#00d4aa", marginBottom: 8 }}>✦ 해석을 쓰는 중…</div>
+                      {[92, 100, 74].map((w, i) => (
+                        <div key={i} style={{ height: 10, width: `${w}%`, background: "var(--card2)", borderRadius: 5, marginBottom: 8, opacity: 0.6 }} />
+                      ))}
+                    </div>
                   )}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    {result.analysis.johu.solution.map((s, i) => (
-                      <div key={i} style={{ fontSize: 13, color: "var(--muted)", display: "flex", gap: 8 }}>
-                        <span>•</span><span>{s}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
 
-                {/* 지지 합충형 */}
-                {result.analysis.jijiRelation && (
-                  <div style={{ background: "var(--card)", borderRadius: 8, padding: "10px 14px", marginBottom: 12 }}>
-                    <div style={{ fontSize: 12, color: "var(--accent2)", marginBottom: 4 }}>
-                      지지 관계 — {result.analysis.jijiRelation.type}<HelpButton id="지지관계" />
-                    </div>
-                    <div style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.7 }}>
-                      {result.analysis.jijiRelation.desc}
-                    </div>
-                  </div>
-                )}
-
-                {/* 십신 분석 */}
-                <div style={{ background: "var(--bg2)", borderRadius: 12, padding: 16, marginBottom: 12 }}>
-                  <p style={{ fontSize: 11, color: "var(--accent)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 12 }}>// 십신 분석 <HelpButton id="십신" /></p>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-                    <div style={{ background: "#6c63ff", color: "white", borderRadius: 6, padding: "4px 12px", fontSize: 13, fontWeight: 700 }}>
-                      {result.analysis.tenGod}
-                    </div>
-                    <div style={{ fontSize: 14, color: "var(--muted)" }}>{result.analysis.energy}</div>
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    {[
-                      { color: "#00d4aa", icon: "✦ 좋은 흐름", text: result.analysis.advice },
-                      { color: "#f59e0b", icon: "⚠ 주의사항", text: result.analysis.caution },
-                      { color: "#a78bfa", icon: "🏃 외부활동", text: result.analysis.activity },
-                    ].map((item) => (
-                      <div key={item.icon} style={{ background: "var(--card)", borderRadius: 8, padding: "12px 14px" }}>
-                        <div style={{ fontSize: 11, color: item.color, marginBottom: 6 }}>{item.icon}</div>
-                        <div style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.7 }}>{item.text}</div>
+                  {!aiLoading && aiFortune && (
+                    <div style={{ background: "var(--card)", borderRadius: 8, padding: "14px 16px" }}>
+                      <div style={{ fontSize: 11, color: "#00d4aa", marginBottom: 8 }}>✦ 오늘의 해석</div>
+                      <div style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.9, whiteSpace: "pre-line" }}>
+                        {aiFortune}
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  )}
+
+                  {/* 생성 실패 시에는 기존 십신 기본 설명으로 대체 */}
+                  {!aiLoading && !aiFortune && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {aiError && (
+                        <div style={{ fontSize: 12, color: "#f59e0b", lineHeight: 1.6 }}>
+                          {aiError} 기본 해석을 보여드릴게요.
+                        </div>
+                      )}
+                      {[
+                        { color: "#00d4aa", icon: "✦ 좋은 흐름", text: result.analysis.advice },
+                        { color: "#f59e0b", icon: "⚠ 주의사항", text: result.analysis.caution },
+                        { color: "#a78bfa", icon: "🏃 외부활동", text: result.analysis.activity },
+                      ].map((item) => (
+                        <div key={item.icon} style={{ background: "var(--card)", borderRadius: 8, padding: "12px 14px" }}>
+                          <div style={{ fontSize: 11, color: item.color, marginBottom: 6 }}>{item.icon}</div>
+                          <div style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.7 }}>{item.text}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 
                 {/* 신강/신약 */}
@@ -1989,37 +1919,17 @@ export default function Home() {
                   </p>
                 </div>
                 
-                {/* 격국 판단 */}
-                <div style={{ background: "var(--bg2)", borderRadius: 12, padding: 16, marginBottom: 12 }}>
-                  <p style={{ fontSize: 11, color: "var(--accent)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 12 }}>// 격국 판단 <HelpButton id="격국" /></p>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                    <div style={{ background: "rgba(0,212,170,0.15)", border: "1px solid rgba(0,212,170,0.3)", color: "#00d4aa", borderRadius: 6, padding: "4px 12px", fontSize: 13, fontWeight: 700 }}>
-                      {result.analysis.geokkuk.name}
-                    </div>
-                  </div>
-                  <div style={{ background: "var(--card)", borderRadius: 8, padding: "12px 14px", marginBottom: 10 }}>
-                    <div style={{ fontSize: 11, color: "var(--accent2)", marginBottom: 6 }}>✦ 격국 특성</div>
-                    <div style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.7 }}>{result.analysis.geokkuk.desc}</div>
-                  </div>
-                  <div style={{ background: "var(--card)", borderRadius: 8, padding: "12px 14px" }}>
-                    <div style={{ fontSize: 11, color: "#a78bfa", marginBottom: 6 }}>💎 격국 용신</div>
-                    <div style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.7 }}>
-                      <strong style={{ fontWeight: 700 }}>{result.analysis.geokkuk.yongsin}</strong>
-                    </div>
-                  </div>
-                </div> 
-                
                 {/* 최종 용신 */}
                 {result.analysis.finalYongsin && (
                   <div style={{
-                    background: result.analysis.finalYongsin.confidence === "확실"
+                    background: result.analysis.finalYongsin.confidence === "유력"
                       ? "rgba(0,212,170,0.1)"
-                      : result.analysis.finalYongsin.confidence === "보통"
+                      : result.analysis.finalYongsin.confidence === "경합"
                       ? "rgba(108,99,255,0.1)"
                       : "rgba(245,158,11,0.1)",
-                    border: `1px solid ${result.analysis.finalYongsin.confidence === "확실"
+                    border: `1px solid ${result.analysis.finalYongsin.confidence === "유력"
                       ? "rgba(0,212,170,0.3)"
-                      : result.analysis.finalYongsin.confidence === "보통"
+                      : result.analysis.finalYongsin.confidence === "경합"
                       ? "rgba(108,99,255,0.3)"
                       : "rgba(245,158,11,0.3)"}`,
                     borderRadius: 12, padding: 16, marginBottom: 12
@@ -2028,70 +1938,46 @@ export default function Home() {
                     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
                       <div style={{
                         fontSize: 22, fontWeight: 700,
-                        color: result.analysis.finalYongsin.confidence === "확실" ? "#00d4aa"
-                          : result.analysis.finalYongsin.confidence === "보통" ? "#6c63ff"
+                        color: result.analysis.finalYongsin.confidence === "유력" ? "#00d4aa"
+                          : result.analysis.finalYongsin.confidence === "경합" ? "#6c63ff"
                           : "#f59e0b"
                       }}>
                         {result.analysis.finalYongsin.finalYongsin}
                       </div>
                       <div style={{
                         fontSize: 11, padding: "3px 10px", borderRadius: 12, fontWeight: 600,
-                        background: result.analysis.finalYongsin.confidence === "확실"
+                        background: result.analysis.finalYongsin.confidence === "유력"
                           ? "rgba(0,212,170,0.2)"
-                          : result.analysis.finalYongsin.confidence === "보통"
+                          : result.analysis.finalYongsin.confidence === "경합"
                           ? "rgba(108,99,255,0.2)"
                           : "rgba(245,158,11,0.2)",
-                        color: result.analysis.finalYongsin.confidence === "확실" ? "#00d4aa"
-                          : result.analysis.finalYongsin.confidence === "보통" ? "#6c63ff"
+                        color: result.analysis.finalYongsin.confidence === "유력" ? "#00d4aa"
+                          : result.analysis.finalYongsin.confidence === "경합" ? "#6c63ff"
                           : "#f59e0b",
                       }}>
                         {result.analysis.finalYongsin.confidence}
                       </div>
                     </div>
+                    {/* 관점별 지목 — 하나로 단정하지 않고 후보를 나란히 보여준다 */}
+                    {result.analysis.finalYongsin.candidates?.length > 0 && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+                        {result.analysis.finalYongsin.candidates.map((c) => (
+                          <div key={c.el} style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--card)", borderRadius: 8, padding: "8px 12px" }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", minWidth: 52 }}>{c.name}</span>
+                            <span style={{ fontSize: 11, color: "var(--muted)", flex: 1 }}>{c.votes.join(" · ")}</span>
+                            <span style={{ fontSize: 11, color: c.rootless ? "#f59e0b" : "var(--muted)" }}>
+                              {c.rootless ? "원국에 없음" : `원국 ${c.rootPct}%`}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <p style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.7 }}>
                       {result.analysis.finalYongsin.reason}
                     </p>
                   </div>
                 )}
 
-                {/* 억부용신 */}
-                {result.analysis.yongsin && (
-                  <div style={{ background: "var(--bg2)", borderRadius: 12, padding: 16, marginBottom: 12 }}>
-                    <p style={{ fontSize: 11, color: "var(--accent)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 12 }}>// 억부용신 <HelpButton id="억부용신" /></p>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                      <div style={{ background: "rgba(0,212,170,0.1)", border: "1px solid rgba(0,212,170,0.3)", borderRadius: 8, padding: "10px 8px", textAlign: "center" }}>
-                        <div style={{ fontSize: 11, color: "#00d4aa", marginBottom: 4 }}>용신 💎</div>
-                        <div style={{ fontSize: 15, fontWeight: 700, color: "#00d4aa" }}>{result.analysis.yongsin.yongsin}</div>
-                      </div>
-                      <div style={{ background: "rgba(167,139,250,0.1)", border: "1px solid rgba(167,139,250,0.3)", borderRadius: 8, padding: "10px 8px", textAlign: "center" }}>
-                        <div style={{ fontSize: 11, color: "#a78bfa", marginBottom: 4 }}>희신 ✨</div>
-                        <div style={{ fontSize: 15, fontWeight: 700, color: "#a78bfa" }}>{result.analysis.yongsin.heesin}</div>
-                      </div>
-                    </div>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
-                      <div style={{ background: "rgba(255,107,107,0.1)", border: "1px solid rgba(255,107,107,0.3)", borderRadius: 8, padding: "10px 8px", textAlign: "center" }}>
-                        <div style={{ fontSize: 11, color: "#ff6b6b", marginBottom: 4 }}>기신 ⚠️</div>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: "#ff6b6b" }}>{result.analysis.yongsin.gisин}</div>
-                      </div>
-                      <div style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 8, padding: "10px 8px", textAlign: "center" }}>
-                        <div style={{ fontSize: 11, color: "#f59e0b", marginBottom: 4 }}>구신 🔻</div>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: "#f59e0b" }}>{result.analysis.yongsin.gusin}</div>
-                      </div>
-                      <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, padding: "10px 8px", textAlign: "center" }}>
-                        <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>한신 ➖</div>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--muted)" }}>{result.analysis.yongsin.hansin}</div>
-                      </div>
-                    </div>
-
-                    <div style={{ background: "var(--card)", borderRadius: 8, padding: "12px 14px" }}>
-                      <div style={{ fontSize: 11, color: "var(--accent2)", marginBottom: 6 }}>✦ 용신 해설</div>
-                      <div style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.7 }}>{result.analysis.yongsin.desc}</div>
-                    </div>
-                  </div>
-                )}
-                
                 {/* 추천 색상 + 길한 방향 */}
                 <div style={{ background: "var(--bg2)", borderRadius: 12, padding: 16, marginBottom: 12 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -2197,12 +2083,21 @@ export default function Home() {
                       <div style={{ display: "flex", gap: 4, marginBottom: 10, background: "var(--bg)", borderRadius: 8, padding: 4 }}>
                         {[["solar", "양력"], ["lunar", "음력"]].map(([val, label]) => (
                           <button key={val}
-                            onClick={() => setNewPartner({ ...newPartner, isLunar: val === "lunar" })}
+                            onClick={() => setNewPartner({ ...newPartner, isLunar: val === "lunar", isLeapMonth: val === "lunar" && newPartner.isLeapMonth })}
                             style={{ flex: 1, padding: "6px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit", background: (val === "lunar") === newPartner.isLunar ? "var(--accent)" : "transparent", color: (val === "lunar") === newPartner.isLunar ? "white" : "var(--muted)" }}>
                             {label}
                           </button>
                         ))}
                       </div>
+
+                      {newPartner.isLunar && (
+                        <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, cursor: "pointer" }}>
+                          <input type="checkbox" checked={!!newPartner.isLeapMonth}
+                            onChange={(e) => setNewPartner({ ...newPartner, isLeapMonth: e.target.checked })}
+                            style={{ width: 15, height: 15, accentColor: "var(--accent)", cursor: "pointer", flexShrink: 0 }} />
+                          <span style={{ fontSize: 12, color: "var(--text)" }}>윤달이에요</span>
+                        </label>
+                      )}
 
                       {/* 년월일 */}
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
@@ -2256,31 +2151,30 @@ export default function Home() {
 
                 {compatResult && !compatLoading && (
                   <div>
-                    {/* 종합 점수 */}
-                    <div style={{
-                      background: compatResult.compat.totalScore >= 80 ? "rgba(0,212,170,0.1)"
-                        : compatResult.compat.totalScore >= 65 ? "rgba(108,99,255,0.1)"
-                        : compatResult.compat.totalScore >= 50 ? "rgba(245,158,11,0.1)"
-                        : "rgba(255,107,107,0.1)",
-                      border: `1px solid ${compatResult.compat.totalScore >= 80 ? "rgba(0,212,170,0.3)"
-                        : compatResult.compat.totalScore >= 65 ? "rgba(108,99,255,0.3)"
-                        : compatResult.compat.totalScore >= 50 ? "rgba(245,158,11,0.3)"
-                        : "rgba(255,107,107,0.3)"}`,
-                      borderRadius: 12, padding: 16, marginBottom: 12, textAlign: "center"
-                    }}>
-                      <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>
-                        {birth.name || "나"} ↔ {compatResult.partnerName}
-                      </div>
-                      <div style={{ fontSize: 40, fontWeight: 700, color: compatResult.compat.totalScore >= 80 ? "#00d4aa" : compatResult.compat.totalScore >= 65 ? "#6c63ff" : compatResult.compat.totalScore >= 50 ? "#f59e0b" : "#ff6b6b", marginBottom: 6 }}>
-                        {compatResult.compat.totalScore}점
-                      </div>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", marginBottom: 10 }}>
-                        {compatResult.compat.grade}
-                      </div>
-                      <div style={{ fontSize: 14, color: "var(--muted)", lineHeight: 1.7 }}>
-                        {compatResult.compat.summary}
-                      </div>
-                    </div>
+                    {/* 종합 경향 — 점수·등급 대신 세 축의 일치도로 표기 */}
+                    {(() => {
+                      const tone = compatResult.compat.overall === "순조로운 편"
+                        ? { c: "#00d4aa", bg: "rgba(0,212,170,0.1)", bd: "rgba(0,212,170,0.3)" }
+                        : compatResult.compat.overall === "조율이 필요한 편"
+                        ? { c: "#f59e0b", bg: "rgba(245,158,11,0.1)", bd: "rgba(245,158,11,0.3)" }
+                        : { c: "#6c63ff", bg: "rgba(108,99,255,0.1)", bd: "rgba(108,99,255,0.3)" };
+                      return (
+                        <div style={{ background: tone.bg, border: `1px solid ${tone.bd}`, borderRadius: 12, padding: 16, marginBottom: 12, textAlign: "center" }}>
+                          <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8 }}>
+                            {birth.name || "나"} ↔ {compatResult.partnerName}
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 10 }}>
+                            <span style={{ fontSize: 24, fontWeight: 700, color: tone.c }}>{compatResult.compat.overall}</span>
+                            <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 12, fontWeight: 600, background: `${tone.c}30`, color: tone.c }}>
+                              세 관점 {compatResult.compat.agreement}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7 }}>
+                            {compatResult.compat.summary}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* 일주 비교 */}
                     <div style={{ background: "var(--bg2)", borderRadius: 12, padding: 16, marginBottom: 12 }}>
@@ -2315,34 +2209,24 @@ export default function Home() {
                       )}
                     </div>
 
-                    {/* 오행 보완 */}
+                    {/* 관점별 경향 — 임의 가중치 없이 세 축을 나란히 */}
                     <div style={{ background: "var(--bg2)", borderRadius: 12, padding: 16, marginBottom: 12 }}>
-                      <p style={{ fontSize: 11, color: "var(--accent)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>// 오행 관계</p>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>
-                        <span>점수</span>
-                        <span>{compatResult.compat.elementBalance.score}점</span>
+                      <p style={{ fontSize: 11, color: "var(--accent)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 12 }}>// 관점별 경향</p>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                        {compatResult.compat.axes.map((ax: { key: string; label: string; tendency: string; detail: string; desc: string }) => {
+                          const c = ax.tendency === "순조" ? "#00d4aa" : ax.tendency === "조율필요" ? "#f59e0b" : "#6c63ff";
+                          return (
+                            <div key={ax.key} style={{ background: "var(--card)", borderRadius: 8, padding: "12px 14px" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>{ax.label}</span>
+                                <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 10, fontWeight: 600, background: `${c}25`, color: c }}>{ax.tendency}</span>
+                                <span style={{ fontSize: 11, color: "var(--muted)" }}>{ax.detail}</span>
+                              </div>
+                              <div style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.7 }}>{ax.desc}</div>
+                            </div>
+                          );
+                        })}
                       </div>
-                      <div style={{ height: 6, background: "var(--card)", borderRadius: 3, overflow: "hidden", marginBottom: 10 }}>
-                        <div style={{ height: "100%", width: `${compatResult.compat.elementBalance.score}%`, background: "#6c63ff", borderRadius: 3 }} />
-                      </div>
-                      <p style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.7 }}>
-                        {compatResult.compat.elementBalance.desc}
-                      </p>
-                    </div>
-
-                    {/* 신강/신약 균형 */}
-                    <div style={{ background: "var(--bg2)", borderRadius: 12, padding: 16, marginBottom: 12 }}>
-                      <p style={{ fontSize: 11, color: "var(--accent)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>// 신강·신약 균형</p>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>
-                        <span>점수</span>
-                        <span>{compatResult.compat.strengthBalance.score}점</span>
-                      </div>
-                      <div style={{ height: 6, background: "var(--card)", borderRadius: 3, overflow: "hidden", marginBottom: 10 }}>
-                        <div style={{ height: "100%", width: `${compatResult.compat.strengthBalance.score}%`, background: "#00d4aa", borderRadius: 3 }} />
-                      </div>
-                      <p style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.7 }}>
-                        {compatResult.compat.strengthBalance.desc}
-                      </p>
                     </div>
                   </div>
                 )}

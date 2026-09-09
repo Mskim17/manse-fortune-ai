@@ -1,36 +1,80 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# manse-fortune-ai
 
-## Getting Started
+만세력(萬歲曆) 사주 계산 결과를 **Claude Haiku 4.5**로 해석해 오늘의 운세를 생성하는 Next.js 앱.
 
-First, run the development server:
+계산은 절기 기반 만세력 라이브러리가, 해석 문장은 Claude가 담당합니다.
+기존의 고정 문구 테이블을 걷어내고 계산 결과를 그대로 모델에 넘겨 서술하게 했습니다.
+
+## 기능
+
+- **오늘의 운세** — 사주 원국 × 오늘 일진으로 십신·지지관계를 뽑고, 신강/신약·격국·조후·용신을 계산한 뒤 Claude가 3줄로 해석
+- **용신 판정** — 억부·격국·조후 세 관점의 지목을 나란히 보여주고 일치도로 신뢰도(유력/경합/불확실)를 표기
+- **궁합** — 일주 지지·일간 오행·신강약 세 축의 경향과 일치도로 표기
+- **음력 입력** — 윤달 지원, 입춘 이전 출생 시 년주 자동 보정, 경도 시간 보정
+
+## 설계 원칙
+
+만세력은 **과거 통계에 기반한 경향값**이지 확정된 예측이 아닙니다. 그래서:
+
+- 단일 정답을 단정하지 않고 **후보와 근거를 함께** 제시합니다
+- 관점이 갈리면 갈린다는 사실을 그대로 노출합니다 (`경합`, `엇갈림`)
+- 용신 오행이 원국에 없으면(무근) 신뢰도를 낮춥니다
+- 궁합에 `점수`·`천생연분` 같은 정밀해 보이는 표기를 쓰지 않습니다
+- 생성 프롬프트에서 단정적 예언("~할 것입니다")을 금지합니다
+
+## 기술 스택
+
+Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4
+[@fullstackfamily/manseryeok](https://www.npmjs.com/package/@fullstackfamily/manseryeok) (1900~2050년 지원) · [@anthropic-ai/sdk](https://github.com/anthropics/anthropic-sdk-typescript)
+
+## 시작하기
 
 ```bash
+npm install
+cp env.example .env.local   # ANTHROPIC_API_KEY 입력
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+http://localhost:3000 에서 확인합니다.
+API 키가 없어도 만세력 계산과 화면은 동작하며, 해석 부분만 기본 문구로 대체됩니다.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## API
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| 라우트 | 설명 |
+| --- | --- |
+| `POST /api/saju` | 생년월일시 → 사주 원국 + 대상 날짜의 일진 (음/양력, 윤달 지원) |
+| `POST /api/saju/month` | 달력용 한 달치 일진 |
+| `POST /api/fortune` | 계산 결과를 받아 Claude로 해석 문장 생성 (계산은 하지 않음) |
 
-## Learn More
+## 면책
 
-To learn more about Next.js, take a look at the following resources:
+이 앱의 결과는 **재미와 참고용**입니다. 명리학은 검증된 예측 체계가 아니며,
+건강·재무·법률·인간관계에 관한 결정의 근거로 삼지 마세요.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 오늘의 운세 (Claude API)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+`/api/fortune` 라우트가 만세력 계산 결과를 받아 Claude Haiku 4.5로 해석 문장을 생성합니다.
+계산은 기존 `/api/saju` 와 `app/page.tsx` 에서 그대로 수행되고, 이 라우트는 그 결과값만 받아 씁니다.
 
-## Deploy on Vercel
+### 설정
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+cp .env.local.example .env.local
+# .env.local 에 ANTHROPIC_API_KEY 입력
+npm run dev
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+키가 없으면 운세 카드는 503 안내와 함께 기존 십신 기본 설명으로 대체됩니다.
+
+### 동작
+
+| 항목 | 값 |
+| --- | --- |
+| 모델 | `claude-haiku-4-5` |
+| `max_tokens` | 300 |
+| 캐시 키 | 날짜 + 사주 원국 + 일진/월건/세운 + 분석 결과(십신·신강약·격국·용신·조후·오행) 의 SHA-256 |
+| 캐시 수명 | 24시간, 최대 500건 (프로세스 메모리) |
+
+같은 날짜 + 같은 사주 조합이면 Claude를 다시 호출하지 않고 캐시된 문장을 재사용합니다.
+프로세스 메모리 캐시라 서버 인스턴스마다 따로 쌓이고 재배포 시 비워집니다.
+여러 인스턴스가 캐시를 공유해야 하면 Redis 등 외부 스토어로 교체하세요.
