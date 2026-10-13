@@ -129,7 +129,7 @@ const elementColorCodes: Record<string, { name: string; hex: string; desc: strin
   ],
   토: [
     { name: "머스타드·옐로", hex: "#C9A020", desc: "토 기운 강화. 메인" },
-    { name: "브라운·카멜", hex: "#7B4B2A", desc: "안정감. 서브" },
+    { name: "브라운·카멜", hex: "#B8875A", desc: "안정감. 서브" },
     { name: "크림·베이지", hex: "#F5F0E8", desc: "포인트. 소품" },
   ],
   금: [
