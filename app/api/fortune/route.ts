@@ -65,6 +65,7 @@ type FortuneRequest = {
     strength: { strength: string; score: number };
     geokkuk: { name: string; tenGod: string };
     johu: { status: string; label: string; yongsin: string };
+    yongsin?: { yongsin: string; basis?: string };
     finalYongsin: {
       finalYongsin: string;
       confidence: string;
@@ -129,7 +130,11 @@ function buildUserPrompt(body: FortuneRequest): string {
     `[일간 강약 판정] ${a.strength.strength} (신강/신약/중화 중 하나, 지지율 ${a.strength.score}%)`,
     `[격국] ${a.geokkuk.name} (${a.geokkuk.tenGod})`,
     `[조후] ${a.johu.label} / 조후용신 ${a.johu.yongsin || "없음"}`,
-    `[최종 용신] ${a.finalYongsin.finalYongsin} (신뢰도 ${a.finalYongsin.confidence})`,
+    // 화면의 "오늘의 용신" 카드와 같은 오행을 말하도록 그 값을 용신으로 넘긴다.
+    // 신뢰도는 억부·격국·조후 세 관점이 얼마나 겹치는지를 나타낸다.
+    a.yongsin?.yongsin
+      ? `[오늘의 용신] ${a.yongsin.yongsin} (${a.yongsin.basis ?? "억부 기준"}, 신뢰도 ${a.finalYongsin.confidence})`
+      : `[최종 용신] ${a.finalYongsin.finalYongsin} (신뢰도 ${a.finalYongsin.confidence})`,
     ...(a.finalYongsin.candidates?.length
       ? [`[용신 후보 비교] ${a.finalYongsin.candidates
           .map((c) => `${c.name}←${c.votes.join("·")}${c.rootless ? "(원국에 없음)" : ""}`)

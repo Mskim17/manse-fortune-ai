@@ -69,6 +69,7 @@ interface FortuneResult {
     };
     yongsin: {
       yongsinEl: string;
+      basis: string;
       yongsin: string;
       heesinEl: string;
       heesin: string;
@@ -216,8 +217,8 @@ const helpContents: Record<string, { title: string; content: string }> = {
 용신과 추천 색상·방향도 오늘의 강약을 따라가요.`,
   },
   억부용신: {
-    title: "억부용신 (抑扶用神) 이란?",
-    content: `신강·신약을 기준으로 일간의 균형을 맞추는 오행이에요.
+    title: "오늘의 용신 이란?",
+    content: `오늘 나에게 가장 필요한 오행이에요. 기본은 억부(抑扶)로, 신강·신약을 기준으로 일간의 균형을 맞추는 오행을 골라요.
 
 - 신강 → 억(抑): 강한 기운을 눌러줘야
   식상·재성·관성이 용신 후보
@@ -234,18 +235,10 @@ const helpContents: Record<string, { title: string; content: string }> = {
 억부 후보가 여럿이면 태어난 계절(조후)에도 맞는 오행을 먼저 골라요.
 오늘의 강약이 극왕(90 이상)·극약(10 미만)이면 균형을 맞추지 않고 쏠린 기운을 따르는 방식(종격)으로 봐요.
 
-추천 색상·방향은 억부용신이 기준이에요.
-다만 신강이면서 조후가 급한 사주는 조후를 기준으로 하고 억부용신은 보조색으로 보여드려요.`,
-  },
-  최종용신: {
-    title: "최종 용신 이란?",
-    content: `억부용신·격국용신·조후용신을 종합해서 확정한 최종 용신이에요.
+카드 아래 표는 억부·격국·조후 세 관점이 각각 어떤 오행을 가리키는지 나란히 보여줘요.
+여러 관점이 같은 오행에 모일수록 믿을 만한 용신이에요.
 
-- 확실: 세 가지 용신이 일치 → 매우 강한 용신
-- 보통: 두 가지가 일치 → 신뢰할 수 있는 용신
-- 참고: 세 가지가 모두 다름 → 억부용신 우선, 나머지 참고
-
-추천 색상·방향은 억부용신 기준이고, 신강이면서 조후가 급한 사주만 조후 기준으로 보여드려요.
+추천 색상·방향은 오늘의 용신이 기준이에요.
 
 ⚠️ 사주는 통계적 경향성이며 절대적인 운명이 아니에요.`,
   },
@@ -280,7 +273,7 @@ const getColors = (
   // 1순위: 억부용신
   if (yongsin?.yongsinEl) {
     targetEl = yongsin.yongsinEl;
-    basis = "억부용신 기준";
+    basis = "오늘의 용신 기준";
   } else if (strength.strength === "신약") {
     const insungEl: Record<string, string> = {
       목: "수", 화: "목", 토: "화", 금: "토", 수: "금",
@@ -725,6 +718,7 @@ const calcYongsin = (
   hansinEl: string;  // 추가
   hansin: string;    // 추가
   desc: string;
+  basis: string;
 } => {
   const dayGan = dayPillar[0];
   const dayEl = ganToElement[dayGan];
@@ -751,6 +745,8 @@ const calcYongsin = (
   const { tenGod } = geokkuk;
   // 조후가 급한 사주에서 조후가 가리키는 오행. 억부 후보 안에 있으면 그쪽을 우선한다.
   const johuEl = johu && ["극열", "극한", "냉금", "조조"].includes(johu.status) ? johu.yongsinEl : "";
+  // 화면에 보여줄 용신 근거: 억부 기준 / 억부·조후 일치 / 종격
+  let basis = "억부 기준";
   const inNatal = (el: string) => !natalPercentage || (natalPercentage[el] ?? 0) > 0;
   // 일간을 극하는 오행(관성)
   const gwanOfDay = Object.keys(con).find((el) => con[el] === dayEl) || "";
@@ -866,12 +862,17 @@ const calcYongsin = (
       : [insungEl[dayEl], dayEl];
     if (candidates.includes(johuEl) && inNatal(johuEl)) {
       yongsinEl = johuEl;
+      basis = "억부·조후 일치";
       desc = `${geokkuk.name} ${strength.strength} 사주예요. ${strength.strength === "신강" ? "강한 기운을 다루는" : "약한 기운을 돕는"} 방법 가운데 태어난 계절(조후)에도 맞는 ${elName[yongsinEl]} 기운을 용신으로 잡았어요.`;
     }
   }
 
+  // 따로 손대지 않아도 억부가 고른 오행이 조후와 같은 경우
+  if (johuEl && johuEl === yongsinEl) basis = "억부·조후 일치";
+
   let gusinEl = "";
   if (strength.level === "극왕") {
+    basis = "종격 (극왕)";
     // 종격(극왕): 일간 오행이 압도적이라 누르지 않고 그 기운을 따른다.
     // 용신·희신은 일간 오행과 그것이 흘러가는 식상, 기신은 일간을 극하는 관성, 구신은 관성을 생하는 재성.
     const hasSiksang = inNatal(gen[dayEl]);
@@ -881,6 +882,7 @@ const calcYongsin = (
     gusinEl = con[dayEl];
     desc = `오늘은 ${elName[dayEl]} 기운이 한쪽으로 완전히 쏠린 날이에요. 이럴 땐 거스르기보다 그 기운을 따르는 편이 좋아요. ${elName[yongsinEl]} 기운을 쓰고 ${elName[gisinEl]}·${elName[gusinEl]} 기운은 피하세요.`;
   } else if (strength.level === "극약") {
+    basis = "종격 (극약)";
     // 종격(극약): 일간이 버틸 힘이 없어 원국에서 가장 강한 세력(식상·재성·관성)을 따른다.
     // 희신은 그 세력을 키워주는 쪽, 기신은 일간을 어설프게 살리는 인성, 구신은 비겁.
     const forces = [gen[dayEl], con[dayEl], gwanOfDay];
@@ -916,6 +918,7 @@ const calcYongsin = (
     hansinEl,
     hansin: elName[hansinEl] || "",
     desc,
+    basis,
   };
 };
 
@@ -925,7 +928,7 @@ const calcYongsin = (
 // 지목하는지 표로 모은 뒤 "얼마나 겹치는가 + 그 오행이 원국에 실제로 있는가"로
 // 신뢰도를 매긴다. 원국에 없는 오행(무근)은 지목이 겹쳐도 신뢰도를 낮춘다.
 const calcFinalYongsin = (
-  yongsin: { yongsinEl: string; yongsin: string; heesinEl: string; heesin: string; gisinEl: string; gusinEl: string; },
+  yongsin: { yongsinEl: string; yongsin: string; heesinEl: string; heesin: string; gisinEl: string; gusinEl: string; basis?: string; },
   geokkuk: { yongsinEl: string; },
   johu: { yongsinEl: string; status: string; },
   elementPercentage?: Record<string, number>,
@@ -953,7 +956,7 @@ const calcFinalYongsin = (
     if (!el) return;
     votes.set(el, [...(votes.get(el) ?? []), who]);
   };
-  addVote(억부, "억부");
+  addVote(억부, yongsin.basis?.startsWith("종격") ? "종격" : "억부");
   addVote(격국, "격국");
   addVote(조후, johuUrgent ? `조후(${johu.status})` : "조후");
 
@@ -1768,6 +1771,7 @@ export default function Home() {
             strength: data.analysis.strength,
             geokkuk: data.analysis.geokkuk,
             johu: data.analysis.johu,
+            yongsin: { yongsin: data.analysis.yongsin.yongsin, basis: data.analysis.yongsin.basis },
             finalYongsin: {
               finalYongsin: data.analysis.finalYongsin.finalYongsin,
               confidence: data.analysis.finalYongsin.confidence,
@@ -2281,69 +2285,14 @@ export default function Home() {
                   })}
                 </div>
 
-                {/* 최종 용신 */}
-                {result.analysis.finalYongsin && (
-                  <div style={{
-                    background: result.analysis.finalYongsin.confidence === "유력"
-                      ? "rgba(0,212,170,0.1)"
-                      : result.analysis.finalYongsin.confidence === "경합"
-                      ? "rgba(108,99,255,0.1)"
-                      : "rgba(245,158,11,0.1)",
-                    border: `1px solid ${result.analysis.finalYongsin.confidence === "유력"
-                      ? "rgba(0,212,170,0.3)"
-                      : result.analysis.finalYongsin.confidence === "경합"
-                      ? "rgba(108,99,255,0.3)"
-                      : "rgba(245,158,11,0.3)"}`,
-                    borderRadius: 12, padding: 16, marginBottom: 12
-                  }}>
-                    <p style={{ fontSize: 11, color: "var(--accent)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 12 }}>// 최종 용신 <HelpButton id="최종용신" /></p>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                      <div style={{
-                        fontSize: 22, fontWeight: 700,
-                        color: result.analysis.finalYongsin.confidence === "유력" ? "#00d4aa"
-                          : result.analysis.finalYongsin.confidence === "경합" ? "#6c63ff"
-                          : "#f59e0b"
-                      }}>
-                        {result.analysis.finalYongsin.finalYongsin}
-                      </div>
-                      <div style={{
-                        fontSize: 11, padding: "3px 10px", borderRadius: 12, fontWeight: 600,
-                        background: result.analysis.finalYongsin.confidence === "유력"
-                          ? "rgba(0,212,170,0.2)"
-                          : result.analysis.finalYongsin.confidence === "경합"
-                          ? "rgba(108,99,255,0.2)"
-                          : "rgba(245,158,11,0.2)",
-                        color: result.analysis.finalYongsin.confidence === "유력" ? "#00d4aa"
-                          : result.analysis.finalYongsin.confidence === "경합" ? "#6c63ff"
-                          : "#f59e0b",
-                      }}>
-                        {result.analysis.finalYongsin.confidence}
-                      </div>
-                    </div>
-                    {/* 관점별 지목 — 하나로 단정하지 않고 후보를 나란히 보여준다 */}
-                    {result.analysis.finalYongsin.candidates?.length > 0 && (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
-                        {result.analysis.finalYongsin.candidates.map((c) => (
-                          <div key={c.el} style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--card)", borderRadius: 8, padding: "8px 12px" }}>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", minWidth: 52 }}>{c.name}</span>
-                            <span style={{ fontSize: 11, color: "var(--muted)", flex: 1 }}>{c.votes.join(" · ")}</span>
-                            <span style={{ fontSize: 11, color: c.rootless ? "#f59e0b" : "var(--muted)" }}>
-                              {c.rootless ? "원국에 없음" : `원국 ${c.rootPct}%`}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <p style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.7 }}>
-                      {result.analysis.finalYongsin.reason}
-                    </p>
-                  </div>
-                )}
-
-                {/* 억부용신 */}
+                {/* 오늘의 용신 */}
                 {result.analysis.yongsin && (
                   <div style={{ background: "var(--bg2)", borderRadius: 12, padding: 16, marginBottom: 12 }}>
-                    <p style={{ fontSize: 11, color: "var(--accent)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 12 }}>// 억부용신 <HelpButton id="억부용신" /></p>
+                    <p style={{ fontSize: 11, color: "var(--accent)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 12 }}>// 오늘의 용신 <HelpButton id="억부용신" />
+                      <span style={{ fontSize: 11, color: "var(--muted)", background: "var(--card)", padding: "3px 8px", borderRadius: 10, marginLeft: 8, letterSpacing: 0, textTransform: "none" }}>
+                        {result.analysis.yongsin.basis}
+                      </span>
+                    </p>
 
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
                       <div style={{ background: "rgba(0,212,170,0.1)", border: "1px solid rgba(0,212,170,0.3)", borderRadius: 8, padding: "10px 8px", textAlign: "center" }}>
@@ -2375,10 +2324,25 @@ export default function Home() {
                       <div style={{ fontSize: 11, color: "var(--accent2)", marginBottom: 6 }}>✦ 용신 해설</div>
                       <div style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.7 }}>{result.analysis.yongsin.desc}</div>
                     </div>
+                    {/* 관점별 지목 — 억부·격국·조후가 각각 가리키는 오행을 나란히 보여준다 */}
+                    {result.analysis.finalYongsin.candidates?.length > 0 && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 12 }}>
+                        <div style={{ fontSize: 11, color: "var(--muted)" }}>관점별로 가리키는 오행</div>
+                        {result.analysis.finalYongsin.candidates.map((c) => (
+                          <div key={c.el} style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--card)", borderRadius: 8, padding: "8px 12px" }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", minWidth: 52 }}>{c.name}</span>
+                            <span style={{ fontSize: 11, color: "var(--muted)", flex: 1 }}>{c.votes.join(" · ")}</span>
+                            <span style={{ fontSize: 11, color: c.rootless ? "#f59e0b" : "var(--muted)" }}>
+                              {c.rootless ? "원국에 없음" : `원국 ${c.rootPct}%`}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* 추천 색상 + 길한 방향 — 위는 일진 반영(매일 바뀜), 아래는 억부용신 기본색(고정) */}
+                {/* 추천 색상 + 길한 방향 — 위는 일진 반영(매일 바뀜), 아래는 그날의 기준색 */}
                 {(() => {
                   const today = result.analysis.dayPoint;
                   const colors = today?.colors ?? result.analysis.colors;
