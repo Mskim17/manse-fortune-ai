@@ -56,8 +56,9 @@ interface FortuneResult {
     strength: {
       strength: "신강" | "신약" | "중화";
       score: number;
+      level: "극약" | "태약" | "신약" | "중화신약" | "중화신강" | "신강" | "태강" | "극왕";
       desc: string;
-      natal: { strength: "신강" | "신약" | "중화"; score: number };
+      natal: { strength: "신강" | "신약" | "중화"; level: "극약" | "태약" | "신약" | "중화신약" | "중화신강" | "신강" | "태강" | "극왕"; score: number };
     };
     geokkuk: {
       name: string;
@@ -205,6 +206,11 @@ const helpContents: Record<string, { title: string; content: string }> = {
   → 가장 이상적인 상태예요
 
 점수 50% 기준으로 70% 이상이면 신강, 30% 이하면 신약이에요.
+화면에는 더 잘게 나눈 8단계로 보여드려요.
+
+- 극약 10 미만 · 태약 10~20 · 신약 20~30
+- 중화신약 30~50 · 중화신강 50~70
+- 신강 70~80 · 태강 80~90 · 극왕 90 이상
 
 오늘의 강약은 타고난 사주에 오늘 일진을 더해 계산해서 날마다 달라져요.
 용신과 추천 색상·방향도 오늘의 강약을 따라가요.`,
@@ -224,6 +230,9 @@ const helpContents: Record<string, { title: string; content: string }> = {
 - 기신 ⚠️: 용신을 극하는 오행 → 피해야
 - 구신 🔻: 기신을 생해주는 오행 → 조심
 - 한신 ➖: 중립 오행
+
+억부 후보가 여럿이면 태어난 계절(조후)에도 맞는 오행을 먼저 골라요.
+오늘의 강약이 극왕(90 이상)·극약(10 미만)이면 균형을 맞추지 않고 쏠린 기운을 따르는 방식(종격)으로 봐요.
 
 추천 색상·방향은 억부용신이 기준이에요.
 다만 신강이면서 조후가 급한 사주는 조후를 기준으로 하고 억부용신은 보조색으로 보여드려요.`,
@@ -320,6 +329,7 @@ const getDayPoint = (
   dayPillar: string,
   baseEl: string,
   basisPrefix = "",
+  roles?: { heesinEl: string; gisinEl: string; gusinEl: string },
 ) => {
   const dayEl = ganToElement[dayPillar[0]];
   if (!dayEl || !baseEl) return null;
@@ -333,12 +343,13 @@ const getDayPoint = (
     목: "수", 화: "목", 토: "화", 금: "토", 수: "금",
   };
   // 억부용신과 같은 방식: 희신 = 용신을 생, 기신 = 용신을 극, 구신 = 기신을 생
-  const gisinEl = controlledBy[baseEl];
+  // 종격처럼 역할이 일반 규칙과 다른 날은 roles로 넘겨받은 값을 쓴다.
+  const gisinEl = roles?.gisinEl ?? controlledBy[baseEl];
   const yongsin = {
     yongsinEl: baseEl,
-    heesinEl: generatedBy[baseEl],
+    heesinEl: roles?.heesinEl ?? generatedBy[baseEl],
     gisinEl,
-    gusinEl: generatedBy[gisinEl],
+    gusinEl: roles?.gusinEl ?? generatedBy[gisinEl],
   };
 
   let role = "한신";
@@ -422,6 +433,7 @@ const calcStrength = (
   todayPillar?: string,
 ): {
   strength: "신강" | "신약" | "중화";
+  level: "극약" | "태약" | "신약" | "중화신약" | "중화신강" | "신강" | "태강" | "극왕";
   score: number;
   desc: string;
 } => {
@@ -521,7 +533,18 @@ const calcStrength = (
     desc = "일간의 기운이 균형 잡혀 있어요. 오늘은 어떤 활동도 무난하게 소화할 수 있는 안정적인 날이에요.";
   }
 
-  return { strength, score, desc };
+  // 화면 표시용 8단계. 30·70 경계는 위 3단계와 같아서 용신·색상 계산에는 영향을 주지 않는다.
+  const level =
+    ratio < 0.10 ? "극약"
+    : ratio < 0.20 ? "태약"
+    : ratio <= 0.30 ? "신약"
+    : ratio < 0.50 ? "중화신약"
+    : ratio < 0.70 ? "중화신강"
+    : ratio < 0.80 ? "신강"
+    : ratio < 0.90 ? "태강"
+    : "극왕";
+
+  return { strength, level, score, desc };
 };
 
 // ── 격국 판단 ──
@@ -684,11 +707,12 @@ const calcGeokkuk = (
 
 // ── 억부용신 계산 ──
 const calcYongsin = (
-  strength: { strength: "신강" | "신약" | "중화"; score: number },
+  strength: { strength: "신강" | "신약" | "중화"; score: number; level?: string },
   geokkuk: { name: string; tenGod: string; yongsinEl: string },
   dayPillar: string,
   monthPillar: string,
   natalPercentage?: Record<string, number>,
+  johu?: { status: string; yongsinEl: string },
 ): {
   yongsinEl: string;
   yongsin: string;
@@ -725,6 +749,11 @@ const calcYongsin = (
   let desc = "";
 
   const { tenGod } = geokkuk;
+  // 조후가 급한 사주에서 조후가 가리키는 오행. 억부 후보 안에 있으면 그쪽을 우선한다.
+  const johuEl = johu && ["극열", "극한", "냉금", "조조"].includes(johu.status) ? johu.yongsinEl : "";
+  const inNatal = (el: string) => !natalPercentage || (natalPercentage[el] ?? 0) > 0;
+  // 일간을 극하는 오행(관성)
+  const gwanOfDay = Object.keys(con).find((el) => con[el] === dayEl) || "";
 
   if (strength.strength === "신강") {
     // 신강 → 설기·극 오행이 용신
@@ -828,12 +857,47 @@ const calcYongsin = (
     }
   }
 
-  // 희신 = 용신을 생해주는 오행
-  heesinEl = insungEl[yongsinEl] || heesinEl;
-  // 기신 = 용신을 극하는 오행 (con은 "내가 극하는 오행"이라 역방향으로 찾는다)
-  gisinEl = Object.keys(con).find((el) => con[el] === yongsinEl) || gisinEl;
-  // 구신 = 기신을 생해주는 오행 (기신 강화)
-  const gusinEl = insungEl[gisinEl] || "";
+  // 억부 후보(신강: 식상·재성·관성 / 신약: 인성·비겁) 중 조후와 같은 오행이 원국에 있으면 그것을 쓴다.
+  // 중화인 날은 조후를 끌어오지 않고 억부 그대로 둔다.
+  // 억부와 조후가 같은 오행을 가리키는 용신이 가장 확실하기 때문이다.
+  if (johuEl && johuEl !== yongsinEl && strength.strength !== "중화") {
+    const candidates = strength.strength === "신강"
+      ? [gen[dayEl], con[dayEl], gwanOfDay]
+      : [insungEl[dayEl], dayEl];
+    if (candidates.includes(johuEl) && inNatal(johuEl)) {
+      yongsinEl = johuEl;
+      desc = `${geokkuk.name} ${strength.strength} 사주예요. ${strength.strength === "신강" ? "강한 기운을 다루는" : "약한 기운을 돕는"} 방법 가운데 태어난 계절(조후)에도 맞는 ${elName[yongsinEl]} 기운을 용신으로 잡았어요.`;
+    }
+  }
+
+  let gusinEl = "";
+  if (strength.level === "극왕") {
+    // 종격(극왕): 일간 오행이 압도적이라 누르지 않고 그 기운을 따른다.
+    // 용신·희신은 일간 오행과 그것이 흘러가는 식상, 기신은 일간을 극하는 관성, 구신은 관성을 생하는 재성.
+    const hasSiksang = inNatal(gen[dayEl]);
+    yongsinEl = hasSiksang ? gen[dayEl] : dayEl;
+    heesinEl = hasSiksang ? dayEl : insungEl[dayEl];
+    gisinEl = gwanOfDay;
+    gusinEl = con[dayEl];
+    desc = `오늘은 ${elName[dayEl]} 기운이 한쪽으로 완전히 쏠린 날이에요. 이럴 땐 거스르기보다 그 기운을 따르는 편이 좋아요. ${elName[yongsinEl]} 기운을 쓰고 ${elName[gisinEl]}·${elName[gusinEl]} 기운은 피하세요.`;
+  } else if (strength.level === "극약") {
+    // 종격(극약): 일간이 버틸 힘이 없어 원국에서 가장 강한 세력(식상·재성·관성)을 따른다.
+    // 희신은 그 세력을 키워주는 쪽, 기신은 일간을 어설프게 살리는 인성, 구신은 비겁.
+    const forces = [gen[dayEl], con[dayEl], gwanOfDay];
+    const strongest = [...forces].sort((a, b) => (natalPercentage?.[b] ?? 0) - (natalPercentage?.[a] ?? 0))[0];
+    yongsinEl = strongest;
+    heesinEl = forces.includes(insungEl[strongest]) ? insungEl[strongest] : gen[strongest];
+    gisinEl = insungEl[dayEl];
+    gusinEl = dayEl;
+    desc = `오늘은 내 기운이 아주 약하고 ${elName[yongsinEl]} 기운이 판을 이끄는 날이에요. 이럴 땐 버티기보다 그 흐름을 따르는 편이 좋아요. ${elName[yongsinEl]}·${elName[heesinEl]} 기운을 쓰고 ${elName[gisinEl]}·${elName[gusinEl]} 기운은 피하세요.`;
+  } else {
+    // 희신 = 용신을 생해주는 오행
+    heesinEl = insungEl[yongsinEl] || heesinEl;
+    // 기신 = 용신을 극하는 오행 (con은 "내가 극하는 오행"이라 역방향으로 찾는다)
+    gisinEl = Object.keys(con).find((el) => con[el] === yongsinEl) || gisinEl;
+    // 구신 = 기신을 생해주는 오행 (기신 강화)
+    gusinEl = insungEl[gisinEl] || "";
+  }
   // 한신 = 용신·기신 어느쪽도 아닌 중립
   const allEl = ["목", "화", "토", "금", "수"];
   const hansinEl = allEl.find(
@@ -1375,7 +1439,7 @@ const calcDaily = (
   const natalStrength = calcStrength(saju, saju.day, saju.month);
   const todayStrength = calcStrength(saju, saju.day, saju.month, todayPillar);
   const geokkuk = calcGeokkuk(saju, saju.day, saju.month);
-  const yongsin = calcYongsin(todayStrength, geokkuk, saju.day, saju.month, natalElement.percentage);
+  const yongsin = calcYongsin(todayStrength, geokkuk, saju.day, saju.month, natalElement.percentage, johu);
   const finalYongsin = calcFinalYongsin(yongsin, geokkuk, johu, natalElement.percentage);
 
   const colorInfo = getColors(
@@ -1390,14 +1454,15 @@ const calcDaily = (
   // 신강은 버틸 힘이 있으니 조후가 급한 계절이면 조후용신을 기준으로 삼는다.
   const johuUrgent = ["극열", "극한", "냉금", "조조"].includes(johu.status) && !!johu.yongsinEl;
   const johuDiffers = johuUrgent && johu.yongsinEl !== colorInfo.element;
-  const useJohu = todayStrength.strength === "신강" && johuDiffers;
+  // 극왕은 종격이라 조후로 넘기지 않고 억부용신 카드의 체계를 그대로 쓴다.
+  const useJohu = todayStrength.strength === "신강" && todayStrength.level !== "극왕" && johuDiffers;
   const colorBaseEl = useJohu ? johu.yongsinEl : colorInfo.element;
   const colorBasis = useJohu ? `조후(${johu.status}) 기준` : colorInfo.basis;
   const subEl = useJohu ? colorInfo.element : johuDiffers ? johu.yongsinEl : "";
 
   return {
     johu,
-    strength: { ...todayStrength, natal: { strength: natalStrength.strength, score: natalStrength.score } },
+    strength: { ...todayStrength, natal: { strength: natalStrength.strength, level: natalStrength.level, score: natalStrength.score } },
     geokkuk,
     yongsin,
     finalYongsin,
@@ -1409,7 +1474,12 @@ const calcDaily = (
     subColor: subEl
       ? { basis: useJohu ? colorInfo.basis : `조후(${johu.status}) 기준`, color: elementColorCodes[subEl][0], direction: elementDirection[subEl] }
       : null,
-    dayPoint: getDayPoint(todayPillar, colorBaseEl, useJohu ? `${colorBasis}으로 보면 ` : ""),
+    dayPoint: getDayPoint(
+      todayPillar,
+      colorBaseEl,
+      useJohu ? `${colorBasis}으로 보면 ` : "",
+      !useJohu && colorBaseEl === yongsin.yongsinEl ? yongsin : undefined,
+    ),
   };
 };
 
@@ -2125,7 +2195,7 @@ export default function Home() {
                         ? "rgba(24,95,165,0.3)"
                         : "rgba(108,99,255,0.3)"}`,
                     }}>
-                      {result.analysis.strength.strength}
+                      {result.analysis.strength.level}
                     </div>
                     {/* 강약 게이지 */}
                     <div style={{ flex: 1 }}>
@@ -2158,7 +2228,7 @@ export default function Home() {
                     {result.analysis.strength.desc}
                   </p>
                   <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>
-                    타고난 강약 {result.analysis.strength.natal.strength} {result.analysis.strength.natal.score}점 → 오늘 일진({result.dayPillar}) 반영 {result.analysis.strength.strength} {result.analysis.strength.score}점
+                    타고난 강약 {result.analysis.strength.natal.level} {result.analysis.strength.natal.score}점 → 오늘 일진({result.dayPillar}) 반영 {result.analysis.strength.level} {result.analysis.strength.score}점
                   </p>
                 </div>
                 
