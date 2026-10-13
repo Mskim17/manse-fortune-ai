@@ -25,6 +25,8 @@ interface FortuneResult {
   saju: { year: string; month: string; day: string; hour: string };
   analysis: {
     tenGod: string;
+    jiTenGod: string;
+    jiTenGodDesc: string;
     jijiRelation: { type: string; desc: string } | null;
     energy: string;
     colors: { name: string; hex: string; desc: string }[];
@@ -1288,6 +1290,64 @@ const getTenGod = (dayGan: string, targetGan: string): string => {
   return "기타";
 };
 
+// ── 지지 십신 ──
+// 일진 지지는 그 안의 대표 천간(지장간 본기)으로 바꿔 천간과 같은 규칙으로 십신을 본다.
+// 천간 십신이 겉으로 드러나는 기운이라면 지지 십신은 속에 깔린 기운이다.
+const jiMainGan: Record<string, string> = {
+  자: "계", 축: "기", 인: "갑", 묘: "을", 진: "무", 사: "병",
+  오: "정", 미: "기", 신: "경", 유: "신", 술: "무", 해: "임",
+};
+
+// 화면에는 십신 이름 대신 쉬운 말을 쓴다. 천간은 "겉", 지지는 "속"으로 부른다.
+const tenGodPlain: Record<string, string> = {
+  비견: "자신감", 겁재: "승부욕", 식신: "여유·표현", 상관: "재치·말솜씨", 편재: "활동·기회",
+  정재: "실속·안정", 편관: "압박·도전", 정관: "책임·원칙", 편인: "직관·생각", 정인: "배움·보살핌",
+};
+
+const jiTenGodLine: Record<string, string> = {
+  비견: "속으로는 내 방식대로 밀고 나가려는 힘이 받쳐줘요.",
+  겁재: "속으로는 지기 싫은 마음과 승부욕이 올라와요.",
+  식신: "속으로는 여유롭게 즐기고 표현하고 싶은 마음이 받쳐줘요.",
+  상관: "속으로는 재치와 하고 싶은 말이 꿈틀대요.",
+  편재: "속으로는 움직이고 기회를 잡고 싶은 마음이 앞서요.",
+  정재: "속으로는 실속과 안정을 챙기려는 마음이 받쳐줘요.",
+  편관: "속으로는 긴장감과 압박이 은근히 따라와요.",
+  정관: "속으로는 책임감과 원칙이 중심을 잡아줘요.",
+  편인: "속으로는 생각이 많아지고 촉이 예민해져요.",
+  정인: "속으로는 배우고 보살핌 받는 든든함이 깔려 있어요.",
+};
+
+// 십신 100가지 조합을 따로 쓰지 않고 "속 기운 한 줄 + 겉·속 관계 한 줄"로 조립한다.
+const getJiTenGod = (dayGan: string, todayPillar: string) => {
+  const ganTenGod = getTenGod(dayGan, todayPillar[0]);
+  const jiTenGod = getTenGod(dayGan, jiMainGan[todayPillar[1]] || "");
+  if (!jiTenGodLine[jiTenGod]) return { jiTenGod: "", jiTenGodDesc: "" };
+
+  // 십신 계열은 비겁 → 식상 → 재성 → 관성 → 인성 → 비겁 순으로 생하고, 한 칸 건너 극한다.
+  const groupOf: Record<string, number> = {
+    비견: 0, 겁재: 0, 식신: 1, 상관: 1, 편재: 2, 정재: 2, 편관: 3, 정관: 3, 편인: 4, 정인: 4,
+  };
+  const g = groupOf[ganTenGod];
+  const j = groupOf[jiTenGod];
+
+  let relation = "";
+  if (ganTenGod === jiTenGod) {
+    relation = `겉과 속이 같은 기운(${tenGodPlain[jiTenGod]})이라 평소보다 훨씬 강하게 드러나요.`;
+  } else if (g === j) {
+    relation = `겉(${tenGodPlain[ganTenGod]})과 속(${tenGodPlain[jiTenGod]})이 비슷한 성격의 기운이라 한층 강해져요.`;
+  } else if ((j + 1) % 5 === g) {
+    relation = "속마음이 겉으로 하는 일을 밀어줘서 힘이 실려요.";
+  } else if ((g + 1) % 5 === j) {
+    relation = "겉으로 시작한 일이 속마음이 원하는 쪽으로 자연스럽게 이어져요.";
+  } else if ((j + 2) % 5 === g) {
+    relation = "겉으로는 하고 싶어도 속에서 제동이 걸릴 수 있어요.";
+  } else if ((g + 2) % 5 === j) {
+    relation = "의욕이 앞서 속마음을 누르기 쉬우니 속도를 조절하세요.";
+  }
+
+  return { jiTenGod, jiTenGodDesc: `${jiTenGodLine[jiTenGod]} ${relation}`.trim() };
+};
+
 // ── 십신 설명 ──
 const tenGodDesc: Record<string, { energy: string; advice: string; caution: string; activity: string }> = {
   비견: { energy: "자신감·독립심이 강해지는 날", advice: "일간과 같은 오행이 만나 본연의 기운이 강해져요. 주도적으로 나서고 새로운 프로젝트를 시작하기에 좋은 에너지예요. 평소보다 결단력이 올라와 중요한 선택을 하기에 유리해요.", caution: "고집이 세지고 타인 의견을 흘려듣기 쉬워요. 협업 상황에서 독단적으로 흐를 수 있으니 한 번 더 주변 목소리를 들어보세요.", activity: "외부 활동·운동 에너지가 좋아요. 수영이나 등산 같은 본인 취미 활동 하기에 좋은 날이에요." },
@@ -1565,6 +1625,7 @@ export default function Home() {
       const dayPillarJi = pillarToJi(data.dayPillar);
 
       const tenGod = getTenGod(dayGan, dayPillarGan);
+      const { jiTenGod, jiTenGodDesc } = getJiTenGod(dayGan, data.dayPillar);
       const jijiRelation = getJijiRelation(dayJi, dayPillarJi);
       const desc = tenGodDesc[tenGod] || tenGodDesc["비견"];
       // 십신·지지관계는 "원국 일간 vs 오늘 일진"이고, 오행 점수 카드도 오늘 일진을 포함해 보여준다.
@@ -1579,7 +1640,7 @@ export default function Home() {
       const fortuneResult: FortuneResult = {
         ...data,
         analysis: {
-          tenGod, jijiRelation,
+          tenGod, jiTenGod, jiTenGodDesc, jijiRelation,
           energy: desc.energy,
           colors: daily.colors,
           direction: daily.direction,
@@ -1624,6 +1685,7 @@ export default function Home() {
           yearPillar: data.yearPillar,
           analysis: {
             tenGod: data.analysis.tenGod,
+            jiTenGod: data.analysis.jiTenGod,
             energy: data.analysis.energy,
             jijiRelation: data.analysis.jijiRelation,
             direction: data.analysis.dayPoint?.direction ?? data.analysis.direction,
@@ -1981,7 +2043,8 @@ export default function Home() {
                     <span style={{ fontSize: 11, color: "var(--muted)", minWidth: 30 }}>오늘</span>
                     <span style={{ fontSize: 15, fontWeight: 600, color: "#00d4aa" }}>{result.dayPillar}</span>
                     <span style={{ fontSize: 12, color: "var(--muted)" }}>
-                      {result.analysis.tenGod}
+                      겉 {tenGodPlain[result.analysis.tenGod] ?? result.analysis.tenGod}
+                      {result.analysis.jiTenGod ? ` · 속 ${tenGodPlain[result.analysis.jiTenGod]}` : ""}
                       {result.analysis.jijiRelation ? ` · ${result.analysis.jijiRelation.type}` : ""}
                     </span>
                     <HelpButton id="일진" />
@@ -2027,6 +2090,9 @@ export default function Home() {
                         { color: "#00d4aa", icon: "✦ 좋은 흐름", text: result.analysis.advice },
                         { color: "#f59e0b", icon: "⚠ 주의사항", text: result.analysis.caution },
                         { color: "#a78bfa", icon: "🏃 외부활동", text: result.analysis.activity },
+                        ...(result.analysis.jiTenGod
+                          ? [{ color: "#6c63ff", icon: `◈ 속에 깔린 기운 · ${tenGodPlain[result.analysis.jiTenGod]}`, text: result.analysis.jiTenGodDesc }]
+                          : []),
                       ].map((item) => (
                         <div key={item.icon} style={{ background: "var(--card)", borderRadius: 8, padding: "12px 14px" }}>
                           <div style={{ fontSize: 11, color: item.color, marginBottom: 6 }}>{item.icon}</div>

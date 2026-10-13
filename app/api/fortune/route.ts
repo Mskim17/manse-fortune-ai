@@ -56,6 +56,7 @@ type FortuneRequest = {
   yearPillar: string;
   analysis: {
     tenGod: string;
+    jiTenGod?: string;
     energy?: string;
     jijiRelation: { type: string; desc: string } | null;
     direction?: string;
@@ -79,25 +80,13 @@ function isPillars(v: unknown): v is Pillars {
   return ["year", "month", "day", "hour"].every((k) => typeof p[k] === "string");
 }
 
-// 캐시 키는 "생성 결과에 실제로 영향을 주는 값"만으로 만든다.
-// 색상 hex 같은 표현용 필드가 섞이면 같은 사주인데도 캐시가 갈린다.
-function buildCacheKey(body: FortuneRequest): string {
-  const a = body.analysis;
-  const parts = [
-    body.targetDate,
-    body.saju.year, body.saju.month, body.saju.day, body.saju.hour,
-    body.dayPillar, body.monthPillar, body.yearPillar,
-    a.tenGod,
-    a.jijiRelation?.type ?? "-",
-    a.strength.strength, String(a.strength.score),
-    a.geokkuk.name,
-    a.johu.status, a.johu.yongsin,
-    a.finalYongsin.finalYongsin, a.finalYongsin.confidence,
-    (a.finalYongsin.candidates ?? []).map((c) => `${c.name}:${c.votes.join("+")}:${c.rootless ? "0" : "1"}`).join(","),
-    a.elementScore.dominant ?? "-", a.elementScore.tripleChar ?? "-",
-    ["목", "화", "토", "금", "수"].map((el) => `${el}:${a.elementScore.percentage?.[el] ?? 0}`).join(","),
-  ];
-  return createHash("sha256").update(parts.join("|")).digest("hex");
+// 캐시 키는 Claude에 실제로 보내는 프롬프트 문자열을 그대로 해시해서 만든다.
+// 키와 프롬프트를 따로 조립하면 키에는 없고 프롬프트에만 들어가는 필드가 생겨,
+// 누군가 그 필드에 임의 문구를 넣어 만든 응답이 같은 사주의 다른 사용자에게 캐시로 나갈 수 있다.
+// 프롬프트에는 색상 hex 같은 표현용 값이 들어가지 않으므로 같은 사주·날짜면 키도 같다.
+function buildCacheKey(prompt: string): string {
+  // 작성 규칙(SYSTEM_PROMPT)이 바뀌면 예전 규칙으로 만든 응답이 재사용되지 않도록 함께 해시한다.
+  return createHash("sha256").update(SYSTEM_PROMPT).update(prompt).digest("hex");
 }
 
 // 분량 주의: 응답은 max_tokens 300으로 잘린다. 한국어는 토큰을 많이 먹어서
@@ -113,12 +102,14 @@ const SYSTEM_PROMPT = `당신은 한국 전통 명리학(사주)에 정통한 �
 작성 규칙:
 - 반드시 "~해요" 체로 씁니다. "~습니다", "~입니다" 는 쓰지 않습니다.
 - 세 줄 합쳐 180자 이내. 반드시 세 줄을 모두 끝맺습니다. 길이보다 완결이 우선입니다.
-- 주어진 데이터(십신, 신강·신약, 격국, 용신, 조후, 오행 분포, 지지 관계)에 근거해서 씁니다.
+- 주어진 데이터(천간·지지 십신, 신강·신약, 격국, 용신, 조후, 오행 분포, 지지 관계)에 근거해서 씁니다.
 - 데이터에 없는 사실(건강, 금전, 연애의 구체적 사건, 숫자로 된 예언)은 지어내지 않습니다.
 - 만세력은 과거 통계에 기반한 경향값이지 확정된 미래가 아닙니다. 단정적인 예언("~할 것입니다",
   "~하게 됩니다") 대신 가능성과 경향("~한 흐름이에요", "~하기 좋아요")으로만 씁니다.
 - 용신 신뢰도가 '경합'이나 '불확실'이면 단정하지 말고 "~쪽 기운이 무난해 보여요" 처럼 여지를 둡니다.
 - 용신이 원국에 없다(무근)고 표시되면 그 기운을 강하게 권하지 않습니다.
+- 천간, 지지, 십신 이름(비견·겁재·식신·상관·편재·정재·편관·정관·편인·정인), 용신, 신강·신약 같은 명리 용어는
+  문장에 쓰지 않습니다. "자신감", "승부욕", "겉으로 드러나는 기운", "속마음" 처럼 누구나 아는 쉬운 말로 풀어 씁니다.
 - 마크다운 기호(#, *, -)는 쓰지 않습니다.`;
 
 function buildUserPrompt(body: FortuneRequest): string {
@@ -132,6 +123,7 @@ function buildUserPrompt(body: FortuneRequest): string {
     `[오늘 간지] 세운 ${body.yearPillar} / 월건 ${body.monthPillar} / 일진 ${body.dayPillar}`,
     `[사주 원국] 년 ${body.saju.year} / 월 ${body.saju.month} / 일 ${body.saju.day} / 시 ${body.saju.hour}`,
     `[일간 대비 오늘 일진의 십신] ${a.tenGod}${a.energy ? ` (${a.energy})` : ""}`,
+    ...(a.jiTenGod ? [`[일간 대비 오늘 일진 지지의 십신] ${a.jiTenGod} (지지 본기 기준. 천간 십신이 겉으로 드러나는 기운이라면 이쪽은 바탕에 깔린 기운)`] : []),
     `[지지 관계] ${a.jijiRelation ? `${a.jijiRelation.type} — ${a.jijiRelation.desc}` : "특이 관계 없음"}`,
     // "[신강·신약] 중화" 처럼 쓰면 모델이 "중화된 신약" 으로 뭉개는 경우가 있어 라벨을 분리한다.
     `[일간 강약 판정] ${a.strength.strength} (신강/신약/중화 중 하나, 지지율 ${a.strength.score}%)`,
@@ -179,7 +171,8 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 캐시 조회 ──
-  const cacheKey = buildCacheKey(body);
+  const userPrompt = buildUserPrompt(body);
+  const cacheKey = buildCacheKey(userPrompt);
   const cached = cacheGet(cacheKey);
   if (cached) {
     return NextResponse.json({ text: cached, cached: true, model: MODEL });
@@ -199,7 +192,7 @@ export async function POST(req: NextRequest) {
       model: MODEL,
       max_tokens: MAX_TOKENS,
       system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: buildUserPrompt(body) }],
+      messages: [{ role: "user", content: userPrompt }],
     });
 
     const text = response.content
