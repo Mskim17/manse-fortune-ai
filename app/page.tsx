@@ -30,6 +30,9 @@ interface FortuneResult {
     colors: { name: string; hex: string; desc: string }[];
     direction: string;
     colorBasis: string;
+    colorBaseEl: string;
+    subColor: { basis: string; color: { name: string; hex: string }; direction: string } | null;
+    dayPoint: { element: string; role: string; colors: { name: string; hex: string; desc: string }[]; direction: string; reason: string } | null;
     advice: string;
     caution: string;
     activity: string;
@@ -52,6 +55,7 @@ interface FortuneResult {
       strength: "신강" | "신약" | "중화";
       score: number;
       desc: string;
+      natal: { strength: "신강" | "신약" | "중화"; score: number };
     };
     geokkuk: {
       name: string;
@@ -168,6 +172,21 @@ const helpContents: Record<string, { title: string; content: string }> = {
 각 기둥은 천간(위)과 지지(아래)로 이루어져 있어요.
 일간(일주의 천간)이 사주 분석의 기준점이에요.`,
   },
+  오행점수: {
+    title: "오행 점수 란?",
+    content: `사주 원국과 오늘 일진의 오행(목·화·토·금·수) 분포를 점수로 나타낸 거예요.
+
+- 월지(月支)에 해당하는 오행은 3배 가중치
+- 나머지 천간·지지는 기본 점수
+
+오행이 한쪽으로 치우치면 그 오행이 과다해져 부작용이 생길 수 있어요.
+
+- 용신 💎: 나에게 가장 필요한 오행
+- 희신 ✨: 용신을 도와주는 오행
+- 기신 ⚠️: 나에게 해로운 오행
+- 구신 🔻: 기신을 도와주는 오행
+- 한신 ➖: 중립 오행`,
+  },
   신강신약: {
     title: "신강·신약 (身强·身弱) 이란?",
     content: `일간(나 자신)의 기운이 강한지 약한지를 나타내요.
@@ -183,7 +202,29 @@ const helpContents: Record<string, { title: string; content: string }> = {
 - 중화(中和): 강약이 균형 잡힌 상태
   → 가장 이상적인 상태예요
 
-점수 50% 기준으로 60% 이상이면 신강, 40% 이하면 신약이에요.`,
+점수 50% 기준으로 70% 이상이면 신강, 30% 이하면 신약이에요.
+
+오늘의 강약은 타고난 사주에 오늘 일진을 더해 계산해서 날마다 달라져요.
+용신과 추천 색상·방향도 오늘의 강약을 따라가요.`,
+  },
+  억부용신: {
+    title: "억부용신 (抑扶用神) 이란?",
+    content: `신강·신약을 기준으로 일간의 균형을 맞추는 오행이에요.
+
+- 신강 → 억(抑): 강한 기운을 눌러줘야
+  식상·재성·관성이 용신 후보
+
+- 신약 → 부(扶): 약한 기운을 도와줘야
+  인성·비겁이 용신 후보
+
+- 용신 💎: 가장 필요한 오행 → 이 색상·방향 활용
+- 희신 ✨: 용신을 생해주는 오행 → 보조 활용
+- 기신 ⚠️: 용신을 극하는 오행 → 피해야
+- 구신 🔻: 기신을 생해주는 오행 → 조심
+- 한신 ➖: 중립 오행
+
+추천 색상·방향은 억부용신이 기준이에요.
+다만 신강이면서 조후가 급한 사주는 조후를 기준으로 하고 억부용신은 보조색으로 보여드려요.`,
   },
   최종용신: {
     title: "최종 용신 이란?",
@@ -193,7 +234,7 @@ const helpContents: Record<string, { title: string; content: string }> = {
 - 보통: 두 가지가 일치 → 신뢰할 수 있는 용신
 - 참고: 세 가지가 모두 다름 → 억부용신 우선, 나머지 참고
 
-최종 용신 오행의 색상을 입거나 그 방향으로 행동하면 좋아요.
+추천 색상·방향은 억부용신 기준이고, 신강이면서 조후가 급한 사주만 조후 기준으로 보여드려요.
 
 ⚠️ 사주는 통계적 경향성이며 절대적인 운명이 아니에요.`,
   },
@@ -243,9 +284,9 @@ const getColors = (
     basis = "신강 기준";
   }
 
-  // 2순위: 극열·극한 조후 override
-  // 냉금·조조도 조후가 급한 상태라 override 대상에 포함한다.
-  if (["극열", "극한", "냉금", "조조"].includes(johu.status) && johu.yongsinEl) {
+  // 2순위: 억부용신이 없을 때만 극열·극한 조후로 대체
+  // 냉금·조조도 조후가 급한 상태라 대체 대상에 포함한다.
+  if (!yongsin?.yongsinEl && ["극열", "극한", "냉금", "조조"].includes(johu.status) && johu.yongsinEl) {
     targetEl = johu.yongsinEl;
     basis = `조후(${johu.status}) 기준`;
   }
@@ -266,6 +307,58 @@ const getColors = (
     direction: elementDirection[targetEl],
     element: targetEl,
     basis,
+  };
+};
+
+// ── 오늘의 색상·방향 ──
+// 기본 색상·방향은 억부용신으로 고정이라 날마다 같다.
+// 오늘의 색상·방향은 오늘 일진 천간 오행이 기준 오행(baseEl)에 대해 무엇인지에 따라 달라진다.
+// baseEl은 보통 억부용신이고, 신강이면서 조후가 급한 사주는 조후용신이다.
+const getDayPoint = (
+  dayPillar: string,
+  baseEl: string,
+  basisPrefix = "",
+) => {
+  const dayEl = ganToElement[dayPillar[0]];
+  if (!dayEl || !baseEl) return null;
+
+  // 나를 극하는 오행
+  const controlledBy: Record<string, string> = {
+    목: "금", 화: "수", 토: "목", 금: "화", 수: "토",
+  };
+  // 나를 생하는 오행
+  const generatedBy: Record<string, string> = {
+    목: "수", 화: "목", 토: "화", 금: "토", 수: "금",
+  };
+  // 억부용신과 같은 방식: 희신 = 용신을 생, 기신 = 용신을 극, 구신 = 기신을 생
+  const gisinEl = controlledBy[baseEl];
+  const yongsin = {
+    yongsinEl: baseEl,
+    heesinEl: generatedBy[baseEl],
+    gisinEl,
+    gusinEl: generatedBy[gisinEl],
+  };
+
+  let role = "한신";
+  let targetEl = yongsin.heesinEl;
+  let reason = `${basisPrefix}오늘 일진 ${dayEl} 기운은 중립(한신)이라 희신 ${targetEl} 색으로 용신을 도와요.`;
+
+  if (dayEl === yongsin.yongsinEl || dayEl === yongsin.heesinEl) {
+    role = dayEl === yongsin.yongsinEl ? "용신" : "희신";
+    targetEl = dayEl;
+    reason = `${basisPrefix}오늘 일진 ${dayEl} 기운이 ${role}이에요. 들어온 좋은 기운을 그대로 활용해요.`;
+  } else if (dayEl === yongsin.gisinEl || dayEl === yongsin.gusinEl) {
+    role = dayEl === yongsin.gisinEl ? "기신" : "구신";
+    targetEl = controlledBy[dayEl];
+    reason = `${basisPrefix}오늘 일진 ${dayEl} 기운이 ${role}이에요. ${dayEl} 기운을 눌러주는 ${targetEl} 색으로 균형을 잡아요.`;
+  }
+
+  return {
+    element: targetEl,
+    role,
+    colors: elementColorCodes[targetEl] || elementColorCodes["금"],
+    direction: elementDirection[targetEl],
+    reason,
   };
 };
 
@@ -319,10 +412,12 @@ const calcElementScore = (
 };
 
 // ── 신강/신약 판단 ──
+// todayPillar를 넘기면 원국 네 기둥에 오늘 일진을 한 기둥으로 더해 "오늘의 강약"을 계산한다.
 const calcStrength = (
   saju: { year: string; month: string; day: string; hour: string },
   dayPillar: string,
   monthPillar: string,
+  todayPillar?: string,
 ): {
   strength: "신강" | "신약" | "중화";
   score: number;
@@ -360,7 +455,7 @@ const calcStrength = (
   let supportScore = 0;
   let weakenScore = 0;
 
-  const allPillars = [saju.year, saju.month, saju.day, saju.hour];
+  const allPillars = [saju.year, saju.month, saju.day, saju.hour, todayPillar ?? ""];
 
   allPillars.forEach((pillar, pillarIdx) => {
     if (!pillar || pillar === "미상" || pillar === "-") return;
@@ -412,10 +507,11 @@ const calcStrength = (
   let strength: "신강" | "신약" | "중화";
   let desc: string;
 
-  if (ratio >= 0.60) {
+  // 일진 한 기둥으로 신강과 중화를 오갈 수 있게 중화 구간을 30~70으로 넓게 잡는다.
+  if (ratio >= 0.70) {
     strength = "신강";
     desc = "일간의 기운이 강해요. 오늘은 에너지가 넘치지만 지나치게 고집스러워질 수 있어요. 설기(식상·재성) 활동으로 에너지를 발산하는 게 좋아요.";
-  } else if (ratio <= 0.40) {
+  } else if (ratio <= 0.30) {
     strength = "신약";
     desc = "일간의 기운이 약해요. 오늘은 체력 소모에 주의하고 무리한 계획보다 내실 있는 하루를 보내세요. 인성·비겁 기운으로 충전이 필요해요.";
   } else {
@@ -590,6 +686,7 @@ const calcYongsin = (
   geokkuk: { name: string; tenGod: string; yongsinEl: string },
   dayPillar: string,
   monthPillar: string,
+  natalPercentage?: Record<string, number>,
 ): {
   yongsinEl: string;
   yongsin: string;
@@ -661,6 +758,25 @@ const calcYongsin = (
       gisinEl = insungEl[dayEl];
       desc = `${geokkuk.name} 신강 사주예요. 강한 기운을 재성(${elName[con[dayEl]]})이나 관성으로 설기해야 해요. 활동적이고 도전적인 일에 에너지를 쏟는 것이 좋아요.`;
     }
+
+    // 격국이 지목한 용신이 원국에 한 글자도 없으면(무근) 쓸 실체가 없다.
+    // 이때는 식상·재성·관성 중 원국에 실제로 있는 오행으로 바꾼다.
+    // 비중이 같으면 극하는 것보다 흘려보내는 쪽이 순해서 식상 → 재성 → 관성 순으로 본다.
+    if (natalPercentage && !natalPercentage[yongsinEl]) {
+      const gwanEl = Object.keys(con).find((el) => con[el] === dayEl) || "";
+      const present = [
+        { el: gen[dayEl], label: "식상" },
+        { el: con[dayEl], label: "재성" },
+        { el: gwanEl, label: "관성" },
+      ]
+        .filter((c) => (natalPercentage[c.el] ?? 0) > 0)
+        .sort((a, b) => natalPercentage[b.el] - natalPercentage[a.el]);
+      if (present.length > 0) {
+        const missing = elName[yongsinEl];
+        yongsinEl = present[0].el;
+        desc = `${geokkuk.name} 신강 사주예요. 격국으로는 ${missing}이 용신이지만 원국에 없어서, 원국에 있는 ${present[0].label}(${elName[yongsinEl]})으로 강한 기운을 풀어주는 것이 좋아요.`;
+      }
+    }
   } else if (strength.strength === "신약") {
     // 신약 → 비겁·인성이 용신
     if (["편관", "정관"].includes(tenGod)) {
@@ -694,12 +810,26 @@ const calcYongsin = (
     heesinEl = insungEl[yongsinEl] || "";
     gisinEl = con[yongsinEl] || "";
     desc = `${geokkuk.name} 중화 사주예요. 격국 용신인 ${elName[yongsinEl] || "균형"}을 활용하는 것이 좋아요. 균형 잡힌 하루를 보낼 수 있어요.`;
+
+    // 격국 용신이 원국에 없으면 강한 쪽으로 기울었을 땐 식상·재성·관성,
+    // 약한 쪽으로 기울었을 땐 인성·비겁 중 원국에 있는 오행으로 바꾼다.
+    if (natalPercentage && !natalPercentage[yongsinEl]) {
+      const gwanEl = Object.keys(con).find((el) => con[el] === dayEl) || "";
+      const present = (strength.score >= 50 ? [gen[dayEl], con[dayEl], gwanEl] : [insungEl[dayEl], dayEl])
+        .filter((el) => (natalPercentage[el] ?? 0) > 0)
+        .sort((a, b) => natalPercentage[b] - natalPercentage[a]);
+      if (present.length > 0) {
+        const missing = elName[yongsinEl];
+        yongsinEl = present[0];
+        desc = `${geokkuk.name} 중화 사주예요. 격국으로는 ${missing}이 용신이지만 원국에 없어서, 원국에 있는 ${elName[yongsinEl]} 기운을 쓰는 것이 좋아요.`;
+      }
+    }
   }
 
   // 희신 = 용신을 생해주는 오행
   heesinEl = insungEl[yongsinEl] || heesinEl;
-  // 기신 = 용신을 극하는 오행
-  gisinEl = con[yongsinEl] || gisinEl;
+  // 기신 = 용신을 극하는 오행 (con은 "내가 극하는 오행"이라 역방향으로 찾는다)
+  gisinEl = Object.keys(con).find((el) => con[el] === yongsinEl) || gisinEl;
   // 구신 = 기신을 생해주는 오행 (기신 강화)
   const gusinEl = insungEl[gisinEl] || "";
   // 한신 = 용신·기신 어느쪽도 아닌 중립
@@ -1172,6 +1302,57 @@ const tenGodDesc: Record<string, { energy: string; advice: string; caution: stri
   정인: { energy: "학습·휴식·내면 정리의 기운이 강한 날", advice: "차분하게 공부하거나 생각을 정리하기 좋아요. 몸과 마음을 충전하는 날로 쓰기에 딱 맞아요.", caution: "너무 수동적이 되거나 의존적이 될 수 있어요. 작은 행동이라도 직접 실천하는 습관을 유지하세요.", activity: "여유로운 실내 활동이 잘 맞아요. 피아노 치거나 책 읽기 딱 좋고, 외출은 가벼운 산책 정도가 어울려요." },
 };
 
+// ── 날짜별 분석 ──
+// 격국·조후는 원국만으로 정하고, 강약은 원국에 그날 일진을 더해 정한다.
+// 억부용신·최종 용신·색상 기준은 그날의 강약을 따라가므로 날마다 달라질 수 있다.
+// 운세 화면과 달력이 같은 값을 쓰도록 한곳에서 계산한다.
+const calcDaily = (
+  saju: { year: string; month: string; day: string; hour: string },
+  todayPillar: string,
+) => {
+  const natalElement = calcElementScore(saju, "", saju.month);
+  const johu = getJohu(saju.month, saju.day, natalElement.scores, natalElement.total);
+  const natalStrength = calcStrength(saju, saju.day, saju.month);
+  const todayStrength = calcStrength(saju, saju.day, saju.month, todayPillar);
+  const geokkuk = calcGeokkuk(saju, saju.day, saju.month);
+  const yongsin = calcYongsin(todayStrength, geokkuk, saju.day, saju.month, natalElement.percentage);
+  const finalYongsin = calcFinalYongsin(yongsin, geokkuk, johu, natalElement.percentage);
+
+  const colorInfo = getColors(
+    saju.day,
+    todayStrength,
+    johu,
+    todayPillar,
+    { yongsinEl: yongsin.yongsinEl, heesinEl: yongsin.heesinEl },
+  );
+  // 색상·방향의 기준 오행.
+  // 신약·중화는 일간을 살리는 게 먼저라 억부용신을 쓰고,
+  // 신강은 버틸 힘이 있으니 조후가 급한 계절이면 조후용신을 기준으로 삼는다.
+  const johuUrgent = ["극열", "극한", "냉금", "조조"].includes(johu.status) && !!johu.yongsinEl;
+  const johuDiffers = johuUrgent && johu.yongsinEl !== colorInfo.element;
+  const useJohu = todayStrength.strength === "신강" && johuDiffers;
+  const colorBaseEl = useJohu ? johu.yongsinEl : colorInfo.element;
+  const colorBasis = useJohu ? `조후(${johu.status}) 기준` : colorInfo.basis;
+  const subEl = useJohu ? colorInfo.element : johuDiffers ? johu.yongsinEl : "";
+
+  return {
+    johu,
+    strength: { ...todayStrength, natal: { strength: natalStrength.strength, score: natalStrength.score } },
+    geokkuk,
+    yongsin,
+    finalYongsin,
+    colors: elementColorCodes[colorBaseEl] || colorInfo.colors,
+    direction: elementDirection[colorBaseEl] || colorInfo.direction,
+    colorBasis,
+    colorBaseEl,
+    // 억부와 조후가 다른 오행을 가리키면 기준이 되지 않은 쪽을 보조색으로 함께 보여준다
+    subColor: subEl
+      ? { basis: useJohu ? colorInfo.basis : `조후(${johu.status}) 기준`, color: elementColorCodes[subEl][0], direction: elementDirection[subEl] }
+      : null,
+    dayPoint: getDayPoint(todayPillar, colorBaseEl, useJohu ? `${colorBasis}으로 보면 ` : ""),
+  };
+};
+
 export default function Home() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -1386,23 +1567,10 @@ export default function Home() {
       const tenGod = getTenGod(dayGan, dayPillarGan);
       const jijiRelation = getJijiRelation(dayJi, dayPillarJi);
       const desc = tenGodDesc[tenGod] || tenGodDesc["비견"];
-      // 신강·신약, 격국, 용신, 조후는 모두 "원국" 속성이라 사주 원국의 일주·월주를 기준으로 계산한다.
-      // (오늘 일진을 넘기면 같은 사람의 격국이 날짜마다 바뀌고, 같은 날 모든 사용자가 같은 격국이 된다)
-      // 반면 십신·지지관계는 "원국 일간 vs 오늘 일진"이라 아래에서 그대로 일진을 쓴다.
+      // 십신·지지관계는 "원국 일간 vs 오늘 일진"이고, 오행 점수 카드도 오늘 일진을 포함해 보여준다.
+      // 강약·용신·색상은 calcDaily에서 계산한다.
       const elementResult = calcElementScore(data.saju, data.dayPillar, data.saju.month);
-      const johu = getJohu(data.saju.month, data.saju.day, elementResult.scores, elementResult.total);
-      const strengthResult = calcStrength(data.saju, data.saju.day, data.saju.month);
-      const geokkukResult = calcGeokkuk(data.saju, data.saju.day, data.saju.month);
-      const yongsinResult = calcYongsin(strengthResult, geokkukResult, data.saju.day, data.saju.month);
-      const finalYongsinResult = calcFinalYongsin(yongsinResult, geokkukResult, johu, elementResult.percentage);
-
-      const colorInfo = getColors(
-        data.saju.day,
-        strengthResult,
-        johu,
-        data.dayPillar,
-        { yongsinEl: finalYongsinResult.finalYongsinEl, heesinEl: yongsinResult.heesinEl },
-      );
+      const daily = calcDaily(data.saju, data.dayPillar);
 
       const tripleText = elementResult.tripleChar
         ? `⚠️ 지지 삼중첩(${elementResult.tripleChar}${elementResult.tripleChar}${elementResult.tripleChar}) 감지 — 해당 오행이 극도로 강해져 편중된 에너지가 작용해요. 오늘은 특히 균형에 주의하세요.`
@@ -1413,19 +1581,22 @@ export default function Home() {
         analysis: {
           tenGod, jijiRelation,
           energy: desc.energy,
-          colors: colorInfo.colors,
-          direction: colorInfo.direction,
-          colorBasis: colorInfo.basis,
+          colors: daily.colors,
+          direction: daily.direction,
+          colorBasis: daily.colorBasis,
+          colorBaseEl: daily.colorBaseEl,
+          subColor: daily.subColor,
+          dayPoint: daily.dayPoint,
           advice: desc.advice,
           caution: desc.caution,
           activity: desc.activity,
           elementScore: elementResult,
           tripleText,
-          johu,
-          strength: strengthResult,
-          geokkuk: geokkukResult,
-          yongsin: yongsinResult,
-          finalYongsin: finalYongsinResult,
+          johu: daily.johu,
+          strength: daily.strength,
+          geokkuk: daily.geokkuk,
+          yongsin: daily.yongsin,
+          finalYongsin: daily.finalYongsin,
         },
       };
 
@@ -1455,8 +1626,8 @@ export default function Home() {
             tenGod: data.analysis.tenGod,
             energy: data.analysis.energy,
             jijiRelation: data.analysis.jijiRelation,
-            direction: data.analysis.direction,
-            colors: data.analysis.colors,
+            direction: data.analysis.dayPoint?.direction ?? data.analysis.direction,
+            colors: data.analysis.dayPoint?.colors ?? data.analysis.colors,
             elementScore: {
               percentage: data.analysis.elementScore.percentage,
               dominant: data.analysis.elementScore.dominant,
@@ -1599,6 +1770,9 @@ export default function Home() {
                         };
                         dotColor = elColorMap[ji] || "var(--muted)";
                       }
+                      // 운세를 한 번 조회했으면(사주가 계산돼 있으면) 그날의 추천 색상으로 표시한다
+                      const dayPoint = result ? calcDaily(result.saju, d.dayPillar).dayPoint : null;
+                      if (dayPoint) dotColor = dayPoint.colors[0].hex;
 
                       return (
                         <button
@@ -1625,7 +1799,7 @@ export default function Home() {
                             width: 16,
                             height: 7,
                             borderRadius: 2,
-                            background: dotColor,  // 선택 여부와 무관하게 항상 십신 컬러 유지
+                            background: dotColor,  // 선택 여부와 무관하게 항상 그날의 색상 유지
                           }} />
                         </button>
                       );
@@ -1865,7 +2039,7 @@ export default function Home() {
                 
                 {/* 신강/신약 */}
                 <div style={{ background: "var(--bg2)", borderRadius: 12, padding: 16, marginBottom: 12 }}>
-                  <p style={{ fontSize: 11, color: "var(--accent)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 12 }}>// 신강·신약 판단 <HelpButton id="신강신약" /></p>
+                  <p style={{ fontSize: 11, color: "var(--accent)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 12 }}>// 오늘의 강약 <HelpButton id="신강신약" /></p>
                   <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
                     <div style={{
                       padding: "6px 16px", borderRadius: 20, fontWeight: 700, fontSize: 15,
@@ -1910,15 +2084,67 @@ export default function Home() {
                         <div style={{ position: "absolute", top: 0, left: "50%", width: 2, height: "100%", background: "rgba(255,255,255,0.3)" }} />
                       </div>
                       <div style={{ textAlign: "right", fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
-                        {result.analysis.strength.score}점
+                        오늘 {result.analysis.strength.score}점
                       </div>
                     </div>
                   </div>
                   <p style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.7 }}>
                     {result.analysis.strength.desc}
                   </p>
+                  <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>
+                    타고난 강약 {result.analysis.strength.natal.strength} {result.analysis.strength.natal.score}점 → 오늘 일진({result.dayPillar}) 반영 {result.analysis.strength.strength} {result.analysis.strength.score}점
+                  </p>
                 </div>
                 
+                {/* 오행 점수 */}
+                <div style={{ background: "var(--bg2)", borderRadius: 12, padding: 16, marginBottom: 12 }}>
+                  <p style={{ fontSize: 11, color: "var(--accent)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 12 }}>// 오행 점수 <HelpButton id="오행점수" /></p>
+                  {Object.entries(result.analysis.elementScore.scores).map(([el, score]) => {
+                    const pct = result.analysis.elementScore.percentage[el];
+                    const elColor: Record<string, string> = {
+                      목: "#3B6D11", 화: "#D85A30", 토: "#BA7517", 금: "#888780", 수: "#185FA5"
+                    };
+                    const isDominant = result.analysis.elementScore.dominant === el;
+                    const isYongsin = result.analysis.yongsin?.yongsinEl === el;
+                    const isHeesin = result.analysis.yongsin?.heesinEl === el;
+                    const isGisin = result.analysis.yongsin?.gisinEl === el;
+                    const isGusin = result.analysis.yongsin?.gusinEl === el;
+
+                    const tag = isYongsin ? "용신 💎"
+                      : isHeesin ? "희신 ✨"
+                      : isGisin ? "기신 ⚠️"
+                      : isGusin ? "구신 🔻"
+                      : isDominant ? "과다 ⚡"
+                      : "";
+
+                    const tagColor = isYongsin ? "#00d4aa"
+                      : isHeesin ? "#a78bfa"
+                      : isGisin ? "#ff6b6b"
+                      : isGusin ? "#f59e0b"
+                      : isDominant ? "#ff6b6b"
+                      : "var(--muted)";
+
+                    return (
+                      <div key={el} style={{ marginBottom: 10 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ color: "var(--text)", fontWeight: tag ? 700 : 400 }}>{el}</span>
+                            {tag && (
+                              <span style={{ fontSize: 10, color: tagColor, background: `${tagColor}20`, padding: "1px 6px", borderRadius: 10 }}>
+                                {tag}
+                              </span>
+                            )}
+                          </div>
+                          <span style={{ color: "var(--muted)" }}>{score}점 ({pct}%)</span>
+                        </div>
+                        <div style={{ height: 6, background: "var(--card)", borderRadius: 3, overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: `${pct}%`, background: elColor[el], borderRadius: 3, transition: "width 0.5s", opacity: isGisin || isGusin ? 0.5 : 1 }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
                 {/* 최종 용신 */}
                 {result.analysis.finalYongsin && (
                   <div style={{
@@ -1978,33 +2204,96 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* 추천 색상 + 길한 방향 */}
-                <div style={{ background: "var(--bg2)", borderRadius: 12, padding: 16, marginBottom: 12 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                    <p style={{ fontSize: 11, color: "#6c63ff", letterSpacing: "0.1em", textTransform: "uppercase", margin: 0 }}>// 오늘 추천 색상·방향</p>
-                    <span style={{ fontSize: 11, color: "var(--muted)", background: "var(--card)", padding: "3px 8px", borderRadius: 10 }}>
-                      {result.analysis.colorBasis}
-                    </span>
-                  </div>
+                {/* 억부용신 */}
+                {result.analysis.yongsin && (
+                  <div style={{ background: "var(--bg2)", borderRadius: 12, padding: 16, marginBottom: 12 }}>
+                    <p style={{ fontSize: 11, color: "var(--accent)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 12 }}>// 억부용신 <HelpButton id="억부용신" /></p>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 14 }}>
-                    {result.analysis.colors.map((c) => (
-                      <div key={c.name} style={{ background: "var(--card)", borderRadius: 8, padding: "12px 8px", textAlign: "center", border: "1px solid var(--border)" }}>
-                        <div style={{ width: 32, height: 32, borderRadius: "50%", background: c.hex, margin: "0 auto 8px", border: "2px solid rgba(0,0,0,0.1)", boxShadow: "0 2px 6px rgba(0,0,0,0.15)" }} />
-                        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", marginBottom: 2 }}>{c.name}</div>
-                        <div style={{ fontSize: 11, color: "var(--muted)" }}>{c.desc}</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                      <div style={{ background: "rgba(0,212,170,0.1)", border: "1px solid rgba(0,212,170,0.3)", borderRadius: 8, padding: "10px 8px", textAlign: "center" }}>
+                        <div style={{ fontSize: 11, color: "#00d4aa", marginBottom: 4 }}>용신 💎</div>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: "#00d4aa" }}>{result.analysis.yongsin.yongsin}</div>
                       </div>
-                    ))}
-                  </div>
+                      <div style={{ background: "rgba(167,139,250,0.1)", border: "1px solid rgba(167,139,250,0.3)", borderRadius: 8, padding: "10px 8px", textAlign: "center" }}>
+                        <div style={{ fontSize: 11, color: "#a78bfa", marginBottom: 4 }}>희신 ✨</div>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: "#a78bfa" }}>{result.analysis.yongsin.heesin}</div>
+                      </div>
+                    </div>
 
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, background: "var(--card)", borderRadius: 8, padding: "12px 14px" }}>
-                    <div style={{ fontSize: 24 }}>🧭</div>
-                    <div>
-                      <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 2 }}>길한 방향</div>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: "var(--accent2)" }}>{result.analysis.direction}</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+                      <div style={{ background: "rgba(255,107,107,0.1)", border: "1px solid rgba(255,107,107,0.3)", borderRadius: 8, padding: "10px 8px", textAlign: "center" }}>
+                        <div style={{ fontSize: 11, color: "#ff6b6b", marginBottom: 4 }}>기신 ⚠️</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: "#ff6b6b" }}>{result.analysis.yongsin.gisин}</div>
+                      </div>
+                      <div style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 8, padding: "10px 8px", textAlign: "center" }}>
+                        <div style={{ fontSize: 11, color: "#f59e0b", marginBottom: 4 }}>구신 🔻</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: "#f59e0b" }}>{result.analysis.yongsin.gusin}</div>
+                      </div>
+                      <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, padding: "10px 8px", textAlign: "center" }}>
+                        <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>한신 ➖</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--muted)" }}>{result.analysis.yongsin.hansin}</div>
+                      </div>
+                    </div>
+
+                    <div style={{ background: "var(--card)", borderRadius: 8, padding: "12px 14px" }}>
+                      <div style={{ fontSize: 11, color: "var(--accent2)", marginBottom: 6 }}>✦ 용신 해설</div>
+                      <div style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.7 }}>{result.analysis.yongsin.desc}</div>
                     </div>
                   </div>
-                </div>
+                )}
+
+                {/* 추천 색상 + 길한 방향 — 위는 일진 반영(매일 바뀜), 아래는 억부용신 기본색(고정) */}
+                {(() => {
+                  const today = result.analysis.dayPoint;
+                  const colors = today?.colors ?? result.analysis.colors;
+                  const direction = today?.direction ?? result.analysis.direction;
+                  return (
+                    <div style={{ background: "var(--bg2)", borderRadius: 12, padding: 16, marginBottom: 12 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                        <p style={{ fontSize: 11, color: "#6c63ff", letterSpacing: "0.1em", textTransform: "uppercase", margin: 0 }}>// 오늘 추천 색상·방향</p>
+                        <span style={{ fontSize: 11, color: "var(--muted)", background: "var(--card)", padding: "3px 8px", borderRadius: 10 }}>
+                          {today ? `${result.dayPillar}일 · ${today.role}` : result.analysis.colorBasis}
+                        </span>
+                      </div>
+
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 14 }}>
+                        {colors.map((c) => (
+                          <div key={c.name} style={{ background: "var(--card)", borderRadius: 8, padding: "12px 8px", textAlign: "center", border: "1px solid var(--border)" }}>
+                            <div style={{ width: 32, height: 32, borderRadius: "50%", background: c.hex, margin: "0 auto 8px", border: "2px solid rgba(0,0,0,0.1)", boxShadow: "0 2px 6px rgba(0,0,0,0.15)" }} />
+                            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", marginBottom: 2 }}>{c.name}</div>
+                            <div style={{ fontSize: 11, color: "var(--muted)" }}>{c.desc}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, background: "var(--card)", borderRadius: 8, padding: "12px 14px" }}>
+                        <div style={{ fontSize: 24 }}>🧭</div>
+                        <div>
+                          <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 2 }}>길한 방향</div>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: "var(--accent2)" }}>{direction}</div>
+                        </div>
+                      </div>
+
+                      {today && (
+                        <>
+                          <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6, marginTop: 10 }}>{today.reason}</div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)", fontSize: 12, color: "var(--muted)" }}>
+                            <span>오늘의 기준색 ({result.analysis.colorBasis})</span>
+                            <span style={{ width: 12, height: 12, borderRadius: "50%", background: result.analysis.colors[0].hex, border: "1px solid rgba(0,0,0,0.15)", flexShrink: 0 }} />
+                            <span style={{ color: "var(--text)" }}>{result.analysis.colors[0].name} · {result.analysis.direction}</span>
+                          </div>
+                          {result.analysis.subColor && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, fontSize: 12, color: "var(--muted)" }}>
+                              <span>보조색 ({result.analysis.subColor.basis})</span>
+                              <span style={{ width: 12, height: 12, borderRadius: "50%", background: result.analysis.subColor.color.hex, border: "1px solid rgba(0,0,0,0.15)", flexShrink: 0 }} />
+                              <span style={{ color: "var(--text)" }}>{result.analysis.subColor.color.name} · {result.analysis.subColor.direction}</span>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>
